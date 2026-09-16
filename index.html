@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v12-2026-09-16-larger-images (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v13-2026-09-16-fix-overlap (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -418,7 +418,6 @@ const firebaseConfig = {
   appId: "1:872922076064:web:987f3e49710ef3f9de0ac5",
   measurementId: "G-VQJXLC4NKS"
 };
-
 
 // The shared participant login (its PASSWORD is the passcode participants type in).
 var SHARED_LOGIN_EMAIL = "participant@deepfake.study.org";
@@ -919,7 +918,7 @@ function renderLevel1Body(){
     var isActive = activeMatchImage === im.id;
     var matchedDesc = draft[im.id] ? set.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
     return '<div class="match-image-card' + (isActive?' active':'') + '" data-match-img="' + im.id + '">' +
-      '<div class="zoom-wrap" style="width:76px; flex-shrink:0;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
+      '<div class="zoom-wrap" style="width:120px; flex-shrink:0;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
       '<div class="info">' +
         '<div class="assign-note' + (matchedDesc?' matched':'') + '">' + (matchedDesc ? 'Matched to: \u201c' + escapeHtml(truncate(matchedDesc.text, 40)) + '\u201d' : (isActive ? 'Select a description on the right' : 'Tap to match')) + '</div>' +
       '</div>' +
