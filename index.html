@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v7-2026-09-16-multiset-errorsurfacing (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v8-2026-09-16-zoom-fix-vanish-bug (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -251,6 +251,31 @@
     .task-transition{ transition:none; opacity:1; transform:none; }
   }
 
+  /* ---------- zoomable stimulus images + full-screen lightbox ---------- */
+  img.zoomable{ cursor:zoom-in; }
+  .zoom-wrap{ position:relative; display:inline-block; width:100%; }
+  .zoom-hint{
+    position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.55); color:#fff;
+    width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:14px; pointer-events:none;
+  }
+  .lightbox{
+    display:none; position:fixed; inset:0; background:rgba(10,10,14,0.94);
+    z-index:200; align-items:center; justify-content:center; padding:24px;
+    cursor:zoom-out;
+  }
+  .lightbox.show{ display:flex; }
+  .lightbox img{
+    max-width:92vw; max-height:82vh; border-radius:10px; cursor:default;
+    box-shadow:0 20px 60px rgba(0,0,0,0.5);
+  }
+  .lightbox-back{
+    position:absolute; top:20px; left:20px; background:rgba(255,255,255,0.12);
+    color:#fff; border:1px solid rgba(255,255,255,0.3); padding:10px 18px;
+    font-weight:600; backdrop-filter:blur(4px);
+  }
+  .lightbox-back:hover{ background:rgba(255,255,255,0.22); }
+
   /* ---------- editor: task-set grouping ---------- */
   .set-block{
     border:1.5px solid var(--line-strong); border-radius:var(--radius-lg);
@@ -286,6 +311,7 @@
 <body>
 <div id="app"></div>
 <div class="toast" id="toast"></div>
+<div class="lightbox" id="lightbox"></div>
 
 <script>
 /* =========================================================================
@@ -587,6 +613,32 @@ function showToast(msg){
   showToast._t = setTimeout(function(){ t.classList.remove("show"); }, 1600);
 }
 
+/* ---------- full-screen image zoom ---------- */
+function openLightbox(src){
+  var lb = document.getElementById("lightbox");
+  lb.innerHTML = '<button class="lightbox-back" id="lightboxBack">\u2190 Back</button><img src="' + src + '" alt="enlarged image"/>';
+  lb.classList.add("show");
+  document.getElementById("lightboxBack").onclick = function(e){ e.stopPropagation(); closeLightbox(); };
+  lb.onclick = closeLightbox; // clicking the dark backdrop also closes it
+  var img = lb.querySelector("img");
+  if(img) img.onclick = function(e){ e.stopPropagation(); }; // clicking the image itself shouldn't close it
+}
+function closeLightbox(){
+  var lb = document.getElementById("lightbox");
+  lb.classList.remove("show");
+  lb.innerHTML = "";
+}
+// Re-attached after every render(): any stimulus image opens the full-screen
+// view instead of (or in addition to) whatever the surrounding card does.
+function wireImageZoom(){
+  document.querySelectorAll("[data-zoom-src]").forEach(function(el){
+    el.onclick = function(e){
+      e.stopPropagation(); // don't also trigger the underlying card's select/match handler
+      openLightbox(el.getAttribute("data-zoom-src"));
+    };
+  });
+}
+
 /* ---------- init ---------- */
 async function afterAuth(){
   authReady = true;
@@ -617,6 +669,9 @@ async function afterAuth(){
 async function init(){
   screen = "loading";
   render();
+  document.addEventListener && document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") closeLightbox();
+  });
   fbAuth.onAuthStateChanged(function(user){
     if(user && !authReady){ afterAuth(); }
     else if(!user && !authReady){ screen = "auth"; render(); }
@@ -664,13 +719,7 @@ function escapeHtml(s){
   });
 }
 
-function progressKey(scr){
-  if(scr === "level1") return "l1:" + draftCache.level1.currentSet;
-  if(scr === "level2") return "l2:" + draftCache.level2.currentIndex;
-  if(scr === "level3") return "l3:" + draftCache.level3.currentIndex;
-  return scr;
-}
-var lastAnimKey = null;
+var pendingTransition = false; // set true right before render() only by explicit "move to a different task/image" actions
 function triggerEnterAnimation(id){
   var elm = document.getElementById(id);
   if(!elm) return;
@@ -700,16 +749,12 @@ function render(){
   }
   app.innerHTML = html;
   attachHandlers();
+  wireImageZoom();
 
-  if(screen === "level1" || screen === "level2" || screen === "level3"){
-    var key = progressKey(screen);
-    if(key !== lastAnimKey){
-      lastAnimKey = key;
-      triggerEnterAnimation("taskAnim");
-    }
-  } else {
-    lastAnimKey = null;
+  if((screen === "level1" || screen === "level2" || screen === "level3") && pendingTransition){
+    triggerEnterAnimation("taskAnim");
   }
+  pendingTransition = false;
 }
 
 function renderAuthGate(){
@@ -853,7 +898,7 @@ function renderLevel1Body(){
     var isActive = activeMatchImage === im.id;
     var matchedDesc = draft[im.id] ? set.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
     return '<div class="match-image-card' + (isActive?' active':'') + '" data-match-img="' + im.id + '">' +
-      '<img src="' + im.img + '" alt="stimulus image" />' +
+      '<div class="zoom-wrap" style="width:76px; flex-shrink:0;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
       '<div class="info">' +
         '<div class="assign-note' + (matchedDesc?' matched':'') + '">' + (matchedDesc ? 'Matched to: \u201c' + escapeHtml(truncate(matchedDesc.text, 40)) + '\u201d' : (isActive ? 'Select a description on the right' : 'Tap to match')) + '</div>' +
       '</div>' +
@@ -877,7 +922,7 @@ function renderLevel1Body(){
   var backLink = si > 0 ? '<button class="link-small" id="prevMatchSet" style="margin-bottom:14px;">&larr; Previous matching task</button>' : "";
 
   return subtaskBar('Matching task ' + (si+1) + ' of ' + sets.length, sets.length, si) +
-  '<div class="task-transition" id="taskAnim">' +
+  '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
     '<div class="match-hint">' + (matchedCount < set.images.length ? 'Click an image, then click the description you think matches it.' : (isLastSet ? 'All images matched \u2014 click any pair to change it.' : 'Task complete \u2014 continue when you\u2019re ready.')) + '</div>' +
     '<div class="match-grid">' +
@@ -903,10 +948,10 @@ function renderLevel2Body(){
   var nextBtn = !isLast ? '<div class="continue-bar"><button class="btn-primary" id="nextL2" ' + (answered?'':'disabled') + '>Next image \u2192</button></div>' : "";
 
   return subtaskBar('Image ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
-  '<div class="task-transition" id="taskAnim">' +
+  '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
     '<div class="task-block">' +
-      '<img src="' + im.img + '" alt="stimulus image" />' +
+      '<div class="zoom-wrap" style="max-width:280px;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
       '<label>Is this image real or fake?</label>' +
       '<div class="choice-row">' +
         '<button type="button" class="choice-btn ' + (cur.verdict==='real'?'selected-real':'') + '" data-l2-choice="' + im.id + '" data-value="real">Real</button>' +
@@ -938,10 +983,10 @@ function renderLevel3Body(){
   }).join("");
 
   return subtaskBar('Image ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
-  '<div class="task-transition" id="taskAnim">' +
+  '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
     '<div class="task-block">' +
-      '<img src="' + im.img + '" alt="stimulus image" />' +
+      '<div class="zoom-wrap" style="max-width:280px;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
       '<label>Select all relevant option(s)</label>' +
       '<div class="checkbox-list">' + opts + '</div>' +
     '</div>' +
@@ -1296,7 +1341,7 @@ function attachHandlers(){
   });
 
   app.querySelectorAll("[data-goto]").forEach(function(btn){
-    btn.onclick = function(){ activeMatchImage = null; screen = btn.getAttribute("data-goto"); render(); };
+    btn.onclick = function(){ activeMatchImage = null; screen = btn.getAttribute("data-goto"); pendingTransition = true; render(); };
   });
 
   var finishBtn = document.getElementById("finishBtn");
@@ -1339,6 +1384,7 @@ function attachHandlers(){
     draftCache.level1.currentSet = Math.min(draftCache.level1.currentSet + 1, STUDY.level1.sets.length - 1);
     activeMatchImage = null;
     scheduleAutosave("level1");
+    pendingTransition = true;
     render();
   };
   var prevMatchSet = document.getElementById("prevMatchSet");
@@ -1346,6 +1392,7 @@ function attachHandlers(){
     draftCache.level1.currentSet = Math.max(draftCache.level1.currentSet - 1, 0);
     activeMatchImage = null;
     scheduleAutosave("level1");
+    pendingTransition = true;
     render();
   };
 
@@ -1376,11 +1423,13 @@ function attachHandlers(){
   if(nextL2) nextL2.onclick = function(){
     draftCache.level2.currentIndex = Math.min(draftCache.level2.currentIndex + 1, STUDY.level2.images.length - 1);
     scheduleAutosave("level2");
+    pendingTransition = true;
     render();
   };
   var prevL2 = document.getElementById("prevL2");
   if(prevL2) prevL2.onclick = function(){
     draftCache.level2.currentIndex = Math.max(draftCache.level2.currentIndex - 1, 0);
+    pendingTransition = true;
     render();
   };
 
@@ -1403,11 +1452,13 @@ function attachHandlers(){
   if(nextL3) nextL3.onclick = function(){
     draftCache.level3.currentIndex = Math.min(draftCache.level3.currentIndex + 1, STUDY.level3.images.length - 1);
     scheduleAutosave("level3");
+    pendingTransition = true;
     render();
   };
   var prevL3 = document.getElementById("prevL3");
   if(prevL3) prevL3.onclick = function(){
     draftCache.level3.currentIndex = Math.max(draftCache.level3.currentIndex - 1, 0);
+    pendingTransition = true;
     render();
   };
 
