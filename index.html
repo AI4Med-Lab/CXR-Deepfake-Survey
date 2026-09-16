@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v9-2026-09-16-scoring-exports (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v10-2026-09-16-single-export-grading (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -170,6 +170,7 @@
   .badge.done{ background:var(--success-soft); color:var(--success); }
   .badge.progress{ background:var(--gold-soft); color:var(--gold); }
   .badge.todo{ background:var(--panel-2); color:var(--ink-soft); }
+  .badge.danger{ background:var(--danger-soft); color:var(--danger); }
 
   /* ---------- task blocks (levels 2 & 3) ---------- */
   .task-block{
@@ -1059,13 +1060,16 @@ function renderResearcherPanel(){
       return p[k] && p[k].completed ? '<span class="pill done">Done</span>' : '<span class="pill todo">Pending</span>';
     }).join(" ");
     var s1 = scoreLevel1(p), s2 = scoreLevel2(p), s3 = scoreLevel3(p);
+    var totalCorrect = s1.correct+s2.correct+s3.correct, totalOf = s1.total+s2.total+s3.total;
+    var sTotal = { correct: totalCorrect, total: totalOf };
     return '<tr>' +
       '<td>' + escapeHtml(p.name) + '</td>' +
       '<td>' + p.id + '</td>' +
       '<td>' + st + '</td>' +
-      '<td>' + formatScore(s1) + '</td>' +
-      '<td>' + formatScore(s2) + '</td>' +
-      '<td>' + formatScore(s3) + '</td>' +
+      '<td><span class="badge ' + scoreBadgeClass(s1) + '">' + formatScore(s1) + '</span></td>' +
+      '<td><span class="badge ' + scoreBadgeClass(s2) + '">' + formatScore(s2) + '</span></td>' +
+      '<td><span class="badge ' + scoreBadgeClass(s3) + '">' + formatScore(s3) + '</span></td>' +
+      '<td><span class="badge ' + scoreBadgeClass(sTotal) + '">' + formatScore(sTotal) + '</span></td>' +
       '<td><button class="btn-secondary" style="padding:6px 10px; font-size:12px;" data-view-detail="' + p.id + '">View</button></td>' +
     '</tr>';
   }).join("");
@@ -1079,15 +1083,14 @@ function renderResearcherPanel(){
       '<h2 style="margin:0;">Results</h2>' +
       '<div class="row">' +
         '<button class="btn-secondary" id="refreshData">Refresh</button>' +
-        '<button class="btn-secondary" id="exportCsv">Export CSV</button>' +
-        '<button class="btn-primary" id="exportExcel">Export Excel (color-coded)</button>' +
+        '<button class="btn-primary" id="exportResults">Export Results</button>' +
       '</div>' +
     '</div>' +
     (researcherLoadError
       ? '<div class="warn-banner">Couldn\u2019t load results from the server (' + escapeHtml(String(researcherLoadError)) + '). This usually means the Firestore rules or the email addresses in the file don\u2019t match what\u2019s in Firebase Authentication \u2014 check the browser console for details, then hit Refresh.</div>'
       : '<p class="sub">' + researcherData.length + ' participant(s) recorded.' + '</p>') +
     (anyScoringSet ? '' : '<div class="match-hint">No correct answers are set yet, so scores show as \u2014. Set them in the Manage Content tab (each image now has a \u2018correct answer\u2019 field) to enable scoring.</div>') +
-    (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th>L1 Score</th><th>L2 Score</th><th>L3 Score</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
+    (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th>L1 Score</th><th>L2 Score</th><th>L3 Score</th><th>Total</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
     '<div id="detailPane" style="margin-top:16px;"></div>' +
   '</div>';
 }
@@ -1223,7 +1226,12 @@ function scoreLevel3(p){
   });
   return { correct: correct, total: total };
 }
-function formatScore(s){ return s.total > 0 ? (s.correct + "/" + s.total) : "\u2014"; }
+function formatScore(s){ return s.total > 0 ? (s.correct + "/" + s.total + " (" + Math.round(100*s.correct/s.total) + "%)") : "\u2014"; }
+function scoreBadgeClass(s){
+  if(s.total === 0) return "todo";
+  var frac = s.correct / s.total;
+  return frac >= 0.8 ? "done" : frac >= 0.5 ? "progress" : "danger";
+}
 function isItemCorrect(kind, im, answerValue){
   // returns true/false/null (null = no correct answer defined for this item)
   if(kind === "l1"){ if(!im.correctDescId) return null; return answerValue === im.correctDescId; }
@@ -1485,14 +1493,8 @@ function attachHandlers(){
   };
 
 
-  var exportCsv = document.getElementById("exportCsv");
-  if(exportCsv) exportCsv.onclick = function(){
-    downloadBlob("survey_results.csv", toCSV(researcherData), "text/csv");
-    showToast("Download started");
-  };
-
-  var exportExcel = document.getElementById("exportExcel");
-  if(exportExcel) exportExcel.onclick = function(){
+  var exportResults = document.getElementById("exportResults");
+  if(exportResults) exportResults.onclick = function(){
     downloadBlob("survey_results.xls", toColorCodedExcelHtml(researcherData), "application/vnd.ms-excel");
     showToast("Download started \u2014 green = correct, red = incorrect");
   };
