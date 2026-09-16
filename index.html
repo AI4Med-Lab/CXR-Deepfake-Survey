@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v13-2026-09-16-fix-overlap (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v15-2026-09-16-fix-date-misparse (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -409,7 +409,7 @@ var STUDY = cloneStudy(DEFAULT_STUDY); // overwritten by loadStudyConfig() once 
    FIREBASE CONFIG \u2014 paste the config object from your Firebase project
    (Project settings > Your apps > SDK setup and configuration) here.
    ========================================================================= */
-const firebaseConfig = {
+var firebaseConfig = {
   apiKey: "AIzaSyDMN9jtxEEqLnMblHRWVMjq94EUp2ncV1k",
   authDomain: "cxr-deepfake-survey.firebaseapp.com",
   projectId: "cxr-deepfake-survey",
@@ -1252,7 +1252,7 @@ function scoreLevel3(p){
   });
   return { correct: correct, total: total };
 }
-function formatScore(s){ return s.total > 0 ? (s.correct + "/" + s.total + " (" + Math.round(100*s.correct/s.total) + "%)") : "\u2014"; }
+function formatScore(s){ return s.total > 0 ? (s.correct + "\u2044" + s.total + " (" + Math.round(100*s.correct/s.total) + "%)") : "\u2014"; }
 function scoreBadgeClass(s){
   if(s.total === 0) return "todo";
   var frac = s.correct / s.total;
@@ -1416,11 +1416,15 @@ function scoreCellColor(frac){
 function toColorCodedExcelHtml(list){
   var matrix = buildResultsMatrix(list);
   var html = '<html><head><meta charset="utf-8"></head><body><table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px;">';
-  html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; text-align:left;">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
+  html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; text-align:left; mso-number-format:\'\\@\';">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
   matrix.rows.forEach(function(cells){
     html += '<tr>' + cells.map(function(c){
       var bg = c.correctness === true ? "#d7f2df" : c.correctness === false ? "#fbdad4" : (c.isScore ? scoreCellColor(c.frac) : "#ffffff");
-      return '<td style="background:' + bg + ';">' + escapeHtml(c.text) + '</td>';
+      // mso-number-format:'\@' forces Excel to treat the cell as plain text
+      // (Google Sheets ignores this hint but no longer needs it \u2014 the
+      // fraction-slash character in formatScore() already prevents the
+      // date misparse there regardless of format).
+      return '<td style="background:' + bg + '; mso-number-format:\'\\@\';">' + escapeHtml(c.text) + '</td>';
     }).join('') + '</tr>';
   });
   html += '</table></body></html>';
