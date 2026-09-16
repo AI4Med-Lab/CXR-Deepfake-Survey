@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v10-2026-09-16-single-export-grading (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v11-2026-09-16-density-layout-pass (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -69,19 +69,19 @@
     min-height:100vh;
     -webkit-font-smoothing:antialiased;
   }
-  #app{ max-width:800px; margin:0 auto; padding:0 20px 90px; }
+  #app{ max-width:920px; margin:0 auto; padding:0 20px 70px; }
 
   /* ---------- header ---------- */
   .topbar{
     display:flex; justify-content:space-between; align-items:center;
-    padding:22px 2px; flex-wrap:wrap; gap:10px;
-    border-bottom:1px solid var(--line); margin-bottom:32px;
+    padding:14px 2px; flex-wrap:wrap; gap:10px;
+    border-bottom:1px solid var(--line); margin-bottom:20px;
   }
   .brand{
-    font-family:var(--serif); font-weight:600; font-size:18px; letter-spacing:.005em;
+    font-family:var(--serif); font-weight:600; font-size:17px; letter-spacing:.005em;
     color:var(--ink);
   }
-  .brand .brand-sub{ display:block; font-family:var(--sans); font-weight:500; font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+  .brand .brand-sub{ display:block; font-family:var(--sans); font-weight:500; font-size:11px; color:var(--ink-soft); margin-top:0; }
   .whoami{
     font-size:13px; color:var(--ink-soft);
     display:flex; align-items:center; gap:8px;
@@ -93,33 +93,33 @@
     background:var(--panel);
     border:1px solid var(--line);
     border-radius:var(--radius-lg);
-    padding:32px;
-    margin-bottom:20px;
+    padding:22px 24px;
+    margin-bottom:14px;
   }
-  h1{ font-family:var(--serif); font-weight:600; font-size:28px; line-height:1.25; margin:0 0 10px; letter-spacing:.001em; }
-  h2{ font-family:var(--serif); font-weight:600; font-size:20px; margin:0 0 6px; }
-  p.sub{ color:var(--ink-soft); margin:0 0 22px; line-height:1.55; max-width:62ch; font-size:14.5px; }
-  label{ display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--ink-soft); }
+  h1{ font-family:var(--serif); font-weight:600; font-size:25px; line-height:1.2; margin:0 0 8px; letter-spacing:.001em; }
+  h2{ font-family:var(--serif); font-weight:600; font-size:18px; margin:0 0 4px; }
+  p.sub{ color:var(--ink-soft); margin:0 0 14px; line-height:1.45; max-width:68ch; font-size:14px; }
+  label{ display:block; font-size:12px; font-weight:600; margin-bottom:4px; color:var(--ink-soft); }
 
   input[type=text]{
-    width:100%; padding:10px 12px; border-radius:var(--radius);
+    width:100%; padding:9px 11px; border-radius:var(--radius);
     border:1px solid var(--line-strong); background:var(--paper); color:var(--ink);
-    font-family:var(--sans); font-size:15px; margin-bottom:14px;
+    font-family:var(--sans); font-size:15px; margin-bottom:10px;
   }
   input[type=text]:focus, textarea:focus, select:focus{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
   textarea{
-    width:100%; min-height:80px; padding:10px 12px; border-radius:var(--radius);
+    width:100%; min-height:66px; padding:9px 11px; border-radius:var(--radius);
     border:1px solid var(--line-strong); background:var(--paper); color:var(--ink);
     font-size:14px; font-family:var(--sans); resize:vertical;
   }
   select{
-    width:100%; padding:9px 11px; border-radius:var(--radius);
+    width:100%; padding:8px 10px; border-radius:var(--radius);
     border:1px solid var(--line-strong); background:var(--paper); color:var(--ink); font-size:14px; font-family:var(--sans);
   }
 
   button{
     font-family:var(--sans); cursor:pointer; border:none; border-radius:var(--radius);
-    font-size:14px; font-weight:600; padding:10px 18px;
+    font-size:14px; font-weight:600; padding:9px 16px;
     transition:background .15s ease, opacity .15s ease, border-color .15s ease;
   }
   button:active{ transform:translateY(1px); }
@@ -134,120 +134,127 @@
 
   .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .row.between{ justify-content:space-between; }
-  hr.sep{ border:none; border-top:1px solid var(--line); margin:26px 0; }
+  hr.sep{ border:none; border-top:1px solid var(--line); margin:14px 0; }
 
   .id-box{
     border:1px solid var(--line); border-left:3px solid var(--accent);
     border-radius:0 var(--radius) var(--radius) 0; background:var(--accent-soft);
-    padding:14px 16px; font-size:13.5px; margin-bottom:22px; color:var(--ink-soft);
+    padding:9px 14px; font-size:13px; margin-bottom:14px; color:var(--ink-soft);
   }
-  .id-box code{ font-family:var(--sans); font-size:15px; font-weight:700; color:var(--accent); letter-spacing:.03em; }
+  .id-box code{ font-family:var(--sans); font-size:14px; font-weight:700; color:var(--accent); letter-spacing:.03em; }
 
   /* ---------- progress rail (dashboard) ---------- */
-  .progress-rail{ display:flex; align-items:center; gap:0; margin-bottom:28px; }
+  .progress-rail{ display:flex; align-items:center; gap:0; margin-bottom:16px; }
   .progress-rail .seg{ flex:1; height:4px; background:var(--line); }
   .progress-rail .seg.done{ background:var(--accent); }
   .progress-rail .seg:not(:last-child){ margin-right:4px; }
 
   .level-list{ display:flex; flex-direction:column; }
   .level-item{
-    display:flex; align-items:center; gap:16px;
-    padding:20px 4px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:14px;
+    padding:12px 4px; border-bottom:1px solid var(--line);
   }
   .level-item:last-child{ border-bottom:none; }
   .level-num{
-    width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    width:30px; height:30px; border-radius:50%; flex-shrink:0;
     border:1.5px solid var(--line-strong); color:var(--ink-soft);
     display:flex; align-items:center; justify-content:center;
-    font-family:var(--serif); font-weight:600; font-size:15px;
+    font-family:var(--serif); font-weight:600; font-size:14px;
   }
   .level-num.done{ background:var(--accent); color:#fff; border-color:var(--accent); }
   .level-info{ flex:1; min-width:0; }
-  .level-info .t{ font-weight:600; font-size:15px; }
-  .level-info .s{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .level-info .t{ font-weight:600; font-size:14.5px; }
+  .level-info .s{ font-size:12px; color:var(--ink-soft); margin-top:1px; }
 
-  .badge{ font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .badge{ font-size:11px; font-weight:600; padding:3px 9px; border-radius:999px; white-space:nowrap; }
   .badge.done{ background:var(--success-soft); color:var(--success); }
   .badge.progress{ background:var(--gold-soft); color:var(--gold); }
   .badge.todo{ background:var(--panel-2); color:var(--ink-soft); }
   .badge.danger{ background:var(--danger-soft); color:var(--danger); }
 
-  /* ---------- task blocks (levels 2 & 3) ---------- */
+  /* ---------- task blocks (levels 2 & 3): image + controls side by side ---------- */
   .task-block{
     border:1px solid var(--line); border-radius:var(--radius-lg);
-    padding:20px; margin-bottom:18px; background:var(--paper);
+    padding:14px; margin-bottom:10px; background:var(--paper);
+    display:flex; gap:16px; align-items:flex-start;
   }
+  .task-block .tb-media{ flex-shrink:0; width:170px; }
+  .task-block .tb-body{ flex:1; min-width:0; }
   .task-block img{
-    width:100%; max-width:280px; border-radius:var(--radius);
-    display:block; margin-bottom:14px; border:1px solid var(--line);
+    width:100%; border-radius:var(--radius);
+    display:block; border:1px solid var(--line);
   }
-  .choice-row{ display:flex; gap:10px; margin-bottom:14px; }
+  .choice-row{ display:flex; gap:8px; margin-bottom:8px; }
   .choice-btn{
-    flex:1; padding:11px; border-radius:var(--radius); border:1.5px solid var(--line-strong);
+    flex:1; padding:9px; border-radius:var(--radius); border:1.5px solid var(--line-strong);
     background:var(--panel); color:var(--ink); font-weight:600; text-align:center; font-family:var(--sans);
   }
   .choice-btn.selected-real{ border-color:var(--success); background:var(--success-soft); color:var(--success); }
   .choice-btn.selected-fake{ border-color:var(--danger); background:var(--danger-soft); color:var(--danger); }
 
-  .checkbox-list{ display:flex; flex-direction:column; gap:8px; margin-top:4px; }
+  .checkbox-list{ display:flex; flex-direction:column; gap:6px; margin-top:2px; }
   .checkbox-item{
-    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    display:flex; align-items:center; gap:9px; padding:8px 10px;
     border:1px solid var(--line); border-radius:var(--radius); background:var(--panel);
-    font-size:14px; cursor:pointer;
+    font-size:13.5px; cursor:pointer;
   }
   .checkbox-item input{ width:16px; height:16px; accent-color:var(--accent); flex-shrink:0; }
+  @media (max-width:560px){
+    .task-block{ flex-direction:column; }
+    .task-block .tb-media{ width:100%; max-width:220px; }
+  }
 
   /* ---------- level 1: two-column matching ---------- */
-  .match-grid{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start; }
-  .match-col-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:12px; text-transform:none; }
-  .match-images{ display:flex; flex-direction:column; gap:14px; }
+  .match-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+  .match-col-label{ font-size:11px; font-weight:700; color:var(--ink-soft); margin-bottom:8px; text-transform:none; }
+  .match-images{ display:flex; flex-direction:column; gap:8px; }
   .match-image-card{
     border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--paper);
-    padding:14px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
-    display:flex; gap:12px; align-items:center;
+    padding:9px 10px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+    display:flex; gap:10px; align-items:center;
   }
   .match-image-card:hover{ border-color:var(--line-strong); }
   .match-image-card.active{ border-color:var(--accent); background:var(--accent-soft); }
-  .match-image-card img{ width:76px; height:76px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex-shrink:0; }
+  .match-image-card img{ width:52px; height:52px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex-shrink:0; }
   .match-image-card .info{ flex:1; min-width:0; }
-  .match-image-card .assign-note{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .match-image-card .assign-note{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.3; }
   .match-image-card .assign-note.matched{ color:var(--ink); }
   .match-badge{
-    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    width:24px; height:24px; border-radius:50%; flex-shrink:0;
     display:flex; align-items:center; justify-content:center;
-    font-family:var(--serif); font-weight:700; font-size:13.5px; color:#fff;
+    font-family:var(--serif); font-weight:700; font-size:12.5px; color:#fff;
   }
-  .match-descs{ display:flex; flex-direction:column; gap:14px; }
+  .match-descs{ display:flex; flex-direction:column; gap:8px; }
   .match-desc-row{
     border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--panel);
-    padding:14px; cursor:pointer; display:flex; gap:12px; align-items:flex-start;
-    transition:border-color .15s ease, background .15s ease; font-size:13.5px; line-height:1.5;
+    padding:9px 10px; cursor:pointer; display:flex; gap:10px; align-items:flex-start;
+    transition:border-color .15s ease, background .15s ease; font-size:13px; line-height:1.35;
   }
   .match-desc-row:hover{ border-color:var(--line-strong); }
   .match-desc-row.awaiting{ border-style:dashed; }
   .match-slot{
-    width:28px; height:28px; border-radius:50%; flex-shrink:0; margin-top:1px;
+    width:24px; height:24px; border-radius:50%; flex-shrink:0; margin-top:1px;
     border:1.5px dashed var(--line-strong); display:flex; align-items:center; justify-content:center;
-    font-family:var(--serif); font-weight:700; font-size:13.5px; color:var(--ink-soft);
+    font-family:var(--serif); font-weight:700; font-size:12.5px; color:var(--ink-soft);
   }
   .match-hint{
-    font-size:12.5px; color:var(--ink-soft); background:var(--panel-2);
-    border-radius:var(--radius); padding:9px 12px; margin-bottom:18px;
+    font-size:12px; color:var(--ink-soft); background:var(--panel-2);
+    border-radius:var(--radius); padding:7px 11px; margin-bottom:10px;
   }
   @media (max-width:640px){
-    .match-grid{ grid-template-columns:1fr; gap:20px; }
+    .match-grid{ grid-template-columns:1fr; gap:14px; }
   }
 
   /* ---------- sequential task/item progress + transitions ---------- */
-  .subtask-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px; }
-  .subtask-label{ font-size:12.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
+  .subtask-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
+  .subtask-label{ font-size:12px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
   .subtask-dots{ display:flex; gap:6px; }
   .subtask-dots .dot{ width:7px; height:7px; border-radius:50%; background:var(--line-strong); }
   .subtask-dots .dot.done{ background:var(--accent); }
   .subtask-dots .dot.current{ background:var(--accent); transform:scale(1.35); }
   .task-transition{ opacity:0; transform:translateY(8px); transition:opacity .32s ease, transform .32s ease; }
   .task-transition.in{ opacity:1; transform:translateY(0); }
-  .continue-bar{ display:flex; justify-content:flex-end; margin-top:6px; }
+  .continue-bar{ display:flex; justify-content:flex-end; margin-top:4px; }
   @media (prefers-reduced-motion: reduce){
     .task-transition{ transition:none; opacity:1; transform:none; }
   }
@@ -256,9 +263,9 @@
   img.zoomable{ cursor:zoom-in; }
   .zoom-wrap{ position:relative; display:inline-block; width:100%; }
   .zoom-hint{
-    position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.55); color:#fff;
-    width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    font-size:14px; pointer-events:none;
+    position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.55); color:#fff;
+    width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; pointer-events:none;
   }
   .lightbox{
     display:none; position:fixed; inset:0; background:rgba(10,10,14,0.94);
@@ -277,13 +284,22 @@
   }
   .lightbox-back:hover{ background:rgba(255,255,255,0.22); }
 
-  /* ---------- editor: task-set grouping ---------- */
+  /* ---------- editor: task-set grouping + compact image grid ---------- */
   .set-block{
     border:1.5px solid var(--line-strong); border-radius:var(--radius-lg);
-    padding:18px; margin-bottom:20px; background:var(--panel-2);
+    padding:12px 14px; margin-bottom:12px; background:var(--panel-2);
   }
+  .editor-grid{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));
+    gap:10px; margin-bottom:10px;
+  }
+  .editor-grid .task-block{
+    flex-direction:column; margin-bottom:0; padding:10px;
+  }
+  .editor-grid .task-block .tb-media{ width:100%; }
+  .editor-grid .task-block img{ max-height:130px; object-fit:cover; }
 
-  .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+  .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:6px; }
   .toast{
     position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
     background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:999px;
@@ -293,19 +309,19 @@
   .toast.show{ opacity:1; }
 
   table.results{ width:100%; border-collapse:collapse; font-size:13px; }
-  table.results th, table.results td{ text-align:left; padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
-  table.results th{ color:var(--ink-soft); font-weight:600; font-size:12px; }
-  .pill{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; }
+  table.results th, table.results td{ text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.results th{ color:var(--ink-soft); font-weight:600; font-size:11.5px; }
+  .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:600; }
   .pill.done{ background:var(--success-soft); color:var(--success); }
   .pill.todo{ background:var(--panel-2); color:var(--ink-soft); }
   .warn-banner{
-    background:var(--danger-soft); color:var(--danger); padding:11px 14px;
-    border-radius:var(--radius); font-size:13px; margin-bottom:16px; border:1px solid transparent;
+    background:var(--danger-soft); color:var(--danger); padding:9px 12px;
+    border-radius:var(--radius); font-size:13px; margin-bottom:10px; border:1px solid transparent;
   }
   ::placeholder{ color:var(--ink-soft); opacity:.6; }
   @media (max-width:480px){
-    .card{ padding:22px; }
-    h1{ font-size:23px; }
+    .card{ padding:16px; }
+    h1{ font-size:21px; }
   }
 </style>
 </head>
@@ -399,6 +415,7 @@ const firebaseConfig = {
   appId: "1:872922076064:web:987f3e49710ef3f9de0ac5",
   measurementId: "G-VQJXLC4NKS"
 };
+
 
 // The shared participant login (its PASSWORD is the passcode participants type in).
 var SHARED_LOGIN_EMAIL = "participant@deepfake.study.org";
@@ -952,14 +969,16 @@ function renderLevel2Body(){
   '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
     '<div class="task-block">' +
-      '<div class="zoom-wrap" style="max-width:280px;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
-      '<label>Is this image real or fake?</label>' +
-      '<div class="choice-row">' +
-        '<button type="button" class="choice-btn ' + (cur.verdict==='real'?'selected-real':'') + '" data-l2-choice="' + im.id + '" data-value="real">Real</button>' +
-        '<button type="button" class="choice-btn ' + (cur.verdict==='fake'?'selected-fake':'') + '" data-l2-choice="' + im.id + '" data-value="fake">Fake</button>' +
+      '<div class="tb-media"><div class="zoom-wrap"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div></div>' +
+      '<div class="tb-body">' +
+        '<label>Is this image real or fake?</label>' +
+        '<div class="choice-row">' +
+          '<button type="button" class="choice-btn ' + (cur.verdict==='real'?'selected-real':'') + '" data-l2-choice="' + im.id + '" data-value="real">Real</button>' +
+          '<button type="button" class="choice-btn ' + (cur.verdict==='fake'?'selected-fake':'') + '" data-l2-choice="' + im.id + '" data-value="fake">Fake</button>' +
+        '</div>' +
+        '<label>Why do you think so?</label>' +
+        '<textarea placeholder="Briefly explain your reasoning\u2026" data-l2-reason="' + im.id + '">' + escapeHtml(cur.reasoning||"") + '</textarea>' +
       '</div>' +
-      '<label>Why do you think so?</label>' +
-      '<textarea placeholder="Briefly explain your reasoning\u2026" data-l2-reason="' + im.id + '">' + escapeHtml(cur.reasoning||"") + '</textarea>' +
     '</div>' +
     nextBtn +
   '</div>';
@@ -987,9 +1006,11 @@ function renderLevel3Body(){
   '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
     '<div class="task-block">' +
-      '<div class="zoom-wrap" style="max-width:280px;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
-      '<label>Select all relevant option(s)</label>' +
-      '<div class="checkbox-list">' + opts + '</div>' +
+      '<div class="tb-media"><div class="zoom-wrap"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div></div>' +
+      '<div class="tb-body">' +
+        '<label>Select all relevant option(s)</label>' +
+        '<div class="checkbox-list">' + opts + '</div>' +
+      '</div>' +
     '</div>' +
     nextBtn +
   '</div>';
@@ -1105,20 +1126,21 @@ function renderContentEditor(){
     out += '<div class="set-block">' +
       '<div class="row between" style="margin-bottom:12px;"><h2 style="font-size:16px; margin:0;">Task ' + (si+1) + '</h2>' +
         '<button class="btn-secondary" data-remove="l1set-' + si + '">Remove this task</button></div>' +
-      '<p class="sub" style="margin-bottom:10px;">Images</p>';
+      '<p class="sub" style="margin-bottom:10px;">Images</p><div class="editor-grid">';
     set.images.forEach(function(im, i){
       var descOptions = '<option value="">Not set</option>' + set.descriptions.map(function(d){
         return '<option value="' + escapeHtml(d.id) + '" ' + (im.correctDescId===d.id?'selected':'') + '>' + escapeHtml(truncate(d.text, 50)) + '</option>';
       }).join("");
       out += '<div class="task-block">' +
-        '<img src="' + im.img + '" style="max-width:140px;"/>' +
+        '<img src="' + im.img + '" style="max-height:110px; object-fit:cover;"/>' +
         '<label>Image ID</label><input type="text" data-edit="l1img-' + si + '-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
         '<label>Replace image</label><input type="file" accept="image/*" data-upload="l1img-' + si + '-' + i + '"/>' +
-        '<label style="margin-top:10px;">Correct match (for scoring)</label>' +
+        '<label style="margin-top:6px;">Correct match (for scoring)</label>' +
         '<select data-answer-key="l1-' + si + '-' + i + '">' + descOptions + '</select>' +
-        '<button class="btn-secondary" style="margin-top:8px;" data-remove="l1img-' + si + '-' + i + '">Remove image</button>' +
+        '<button class="btn-secondary" style="margin-top:6px;" data-remove="l1img-' + si + '-' + i + '">Remove image</button>' +
       '</div>';
     });
+    out += '</div>';
     out += '<button class="btn-secondary" data-add="l1img-' + si + '">+ Add image to this task</button>';
     out += '<p class="sub" style="margin:16px 0 8px;">Descriptions</p>';
     set.descriptions.forEach(function(d, i){
@@ -1138,44 +1160,46 @@ function renderContentEditor(){
   '<p class="sub" style="margin-top:6px;">Creates a new task with that many images and that many descriptions (e.g. 5 \u2192 a 5\u00d75 matching task). You can still add or remove individual images/descriptions afterward.</p>';
 
   // Level 2: images (real/fake)
-  out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2>';
+  out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2><div class="editor-grid">';
   contentDraft.level2.images.forEach(function(im, i){
     out += '<div class="task-block">' +
-      '<img src="' + im.img + '" style="max-width:160px;"/>' +
+      '<img src="' + im.img + '" style="max-height:120px; object-fit:cover;"/>' +
       '<label>Image ID</label><input type="text" data-edit="l2img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label>Replace image</label><input type="file" accept="image/*" data-upload="l2img-' + i + '"/>' +
-      '<label style="margin-top:10px;">Correct answer (for scoring)</label>' +
+      '<label style="margin-top:6px;">Correct answer (for scoring)</label>' +
       '<select data-answer-key="l2-' + i + '">' +
         '<option value="" ' + (!im.correctVerdict?'selected':'') + '>Not set</option>' +
         '<option value="real" ' + (im.correctVerdict==='real'?'selected':'') + '>Real</option>' +
         '<option value="fake" ' + (im.correctVerdict==='fake'?'selected':'') + '>Fake</option>' +
       '</select>' +
-      '<button class="btn-secondary" style="margin-top:8px;" data-remove="l2img-' + i + '">Remove image</button>' +
+      '<button class="btn-secondary" style="margin-top:6px;" data-remove="l2img-' + i + '">Remove image</button>' +
     '</div>';
   });
+  out += '</div>';
   out += '<button class="btn-secondary" id="addL2Img">+ Add image</button>';
 
   // Level 3: images each with own options
-  out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2>';
+  out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2><div class="editor-grid">';
   contentDraft.level3.images.forEach(function(im, i){
     if(!im.correctOptions) im.correctOptions = [];
     out += '<div class="task-block">' +
-      '<img src="' + im.img + '" style="max-width:160px;"/>' +
+      '<img src="' + im.img + '" style="max-height:110px; object-fit:cover;"/>' +
       '<label>Image ID</label><input type="text" data-edit="l3img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label>Replace image</label><input type="file" accept="image/*" data-upload="l3img-' + i + '"/>' +
-      '<label style="margin-top:10px;">Checkbox options (edit text, and mark which are correct for scoring)</label>';
+      '<label style="margin-top:6px;">Checkbox options (edit text, and mark which are correct for scoring)</label>';
     im.options.forEach(function(o, j){
       var isCorrect = im.correctOptions.indexOf(o.id) > -1;
-      out += '<div class="row" style="margin-bottom:6px;">' +
+      out += '<div class="row" style="margin-bottom:6px; flex-wrap:nowrap;">' +
         '<input type="checkbox" style="width:16px; height:16px; flex-shrink:0;" data-answer-key="l3-' + i + '-' + j + '" ' + (isCorrect?'checked':'') + ' title="Mark as a correct answer"/>' +
-        '<input type="text" style="flex:1; margin-bottom:0;" data-edit="l3opt-' + i + '-' + j + '" value="' + escapeHtml(o.text) + '"/>' +
+        '<input type="text" style="flex:1; margin-bottom:0; min-width:0;" data-edit="l3opt-' + i + '-' + j + '" value="' + escapeHtml(o.text) + '"/>' +
         '<button class="btn-secondary" data-remove="l3opt-' + i + '-' + j + '">Remove</button>' +
       '</div>';
     });
-    out += '<button class="btn-secondary" data-add="l3opt-' + i + '" style="margin-bottom:8px;">+ Add option</button>' +
+    out += '<button class="btn-secondary" data-add="l3opt-' + i + '" style="margin-bottom:6px;">+ Add option</button>' +
       '<button class="btn-secondary" data-remove="l3img-' + i + '">Remove this image</button>' +
     '</div>';
   });
+  out += '</div>';
   out += '<button class="btn-secondary" id="addL3Img">+ Add image</button>';
 
   out += '<hr class="sep"/><div class="row between">' +
