@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v8-2026-09-16-zoom-fix-vanish-bug (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v9-2026-09-16-scoring-exports (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -338,7 +338,7 @@ function buildDefaultMatchSet(setNum, n){
   var colors = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A'];
   var images = [], descriptions = [];
   for(var i=0;i<n;i++){
-    images.push({ id: 's'+setNum+'img'+(i+1), img: placeholderImg(colors[i%colors.length], shapes[i%shapes.length], 'Set '+setNum+' \u00b7 '+(i+1)) });
+    images.push({ id: 's'+setNum+'img'+(i+1), img: placeholderImg(colors[i%colors.length], shapes[i%shapes.length], 'Set '+setNum+' \u00b7 '+(i+1)), correctDescId: null });
     descriptions.push({ id: 's'+setNum+'desc'+(i+1), text: 'Placeholder description ' + (i+1) + ' for matching task ' + setNum + ' \u2014 replace with real text.' });
   }
   return { id: 'set'+setNum, images: images, descriptions: descriptions };
@@ -354,26 +354,26 @@ var DEFAULT_STUDY = {
     title: "Level 2 \u2014 Real or Fake?",
     instructions: "For each image, decide whether you believe it is real or AI-generated/fake, then briefly explain your reasoning.",
     images: [
-      { id: "r1", img: placeholderImg('#0369a1','blob','Sample 1') },
-      { id: "r2", img: placeholderImg('#be185d','blob','Sample 2') },
-      { id: "r3", img: placeholderImg('#7c3aed','blob','Sample 3') }
+      { id: "r1", img: placeholderImg('#0369a1','blob','Sample 1'), correctVerdict: null },
+      { id: "r2", img: placeholderImg('#be185d','blob','Sample 2'), correctVerdict: null },
+      { id: "r3", img: placeholderImg('#7c3aed','blob','Sample 3'), correctVerdict: null }
     ]
   },
   level3: {
     title: "Level 3 \u2014 Select the Most Relevant Option(s)",
     instructions: "For each image, check all options that you think are relevant.",
     images: [
-      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), options: [
+      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], options: [
           {id:'o1', text:'Unnatural lighting or shadows'},
           {id:'o2', text:'Distorted proportions'},
           {id:'o3', text:'Inconsistent background details'},
           {id:'o4', text:'Looks completely natural'} ] },
-      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), options: [
+      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), correctOptions: [], options: [
           {id:'o1', text:'Unnatural lighting or shadows'},
           {id:'o2', text:'Distorted proportions'},
           {id:'o3', text:'Inconsistent background details'},
           {id:'o4', text:'Looks completely natural'} ] },
-      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), options: [
+      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), correctOptions: [], options: [
           {id:'o1', text:'Unnatural lighting or shadows'},
           {id:'o2', text:'Distorted proportions'},
           {id:'o3', text:'Inconsistent background details'},
@@ -1058,13 +1058,21 @@ function renderResearcherPanel(){
     var st = ['level1','level2','level3'].map(function(k){
       return p[k] && p[k].completed ? '<span class="pill done">Done</span>' : '<span class="pill todo">Pending</span>';
     }).join(" ");
+    var s1 = scoreLevel1(p), s2 = scoreLevel2(p), s3 = scoreLevel3(p);
     return '<tr>' +
       '<td>' + escapeHtml(p.name) + '</td>' +
       '<td>' + p.id + '</td>' +
       '<td>' + st + '</td>' +
+      '<td>' + formatScore(s1) + '</td>' +
+      '<td>' + formatScore(s2) + '</td>' +
+      '<td>' + formatScore(s3) + '</td>' +
       '<td><button class="btn-secondary" style="padding:6px 10px; font-size:12px;" data-view-detail="' + p.id + '">View</button></td>' +
     '</tr>';
   }).join("");
+
+  var anyScoringSet = STUDY.level1.sets.some(function(s){return s.images.some(function(im){return im.correctDescId;});})
+    || STUDY.level2.images.some(function(im){return im.correctVerdict;})
+    || STUDY.level3.images.some(function(im){return im.correctOptions && im.correctOptions.length;});
 
   return '<div class="card">' + tabs +
     '<div class="row between">' +
@@ -1072,13 +1080,14 @@ function renderResearcherPanel(){
       '<div class="row">' +
         '<button class="btn-secondary" id="refreshData">Refresh</button>' +
         '<button class="btn-secondary" id="exportCsv">Export CSV</button>' +
-        '<button class="btn-primary" id="exportJson">Export JSON</button>' +
+        '<button class="btn-primary" id="exportExcel">Export Excel (color-coded)</button>' +
       '</div>' +
     '</div>' +
     (researcherLoadError
       ? '<div class="warn-banner">Couldn\u2019t load results from the server (' + escapeHtml(String(researcherLoadError)) + '). This usually means the Firestore rules or the email addresses in the file don\u2019t match what\u2019s in Firebase Authentication \u2014 check the browser console for details, then hit Refresh.</div>'
       : '<p class="sub">' + researcherData.length + ' participant(s) recorded.' + '</p>') +
-    (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
+    (anyScoringSet ? '' : '<div class="match-hint">No correct answers are set yet, so scores show as \u2014. Set them in the Manage Content tab (each image now has a \u2018correct answer\u2019 field) to enable scoring.</div>') +
+    (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th>L1 Score</th><th>L2 Score</th><th>L3 Score</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
     '<div id="detailPane" style="margin-top:16px;"></div>' +
   '</div>';
 }
@@ -1095,10 +1104,15 @@ function renderContentEditor(){
         '<button class="btn-secondary" data-remove="l1set-' + si + '">Remove this task</button></div>' +
       '<p class="sub" style="margin-bottom:10px;">Images</p>';
     set.images.forEach(function(im, i){
+      var descOptions = '<option value="">Not set</option>' + set.descriptions.map(function(d){
+        return '<option value="' + escapeHtml(d.id) + '" ' + (im.correctDescId===d.id?'selected':'') + '>' + escapeHtml(truncate(d.text, 50)) + '</option>';
+      }).join("");
       out += '<div class="task-block">' +
         '<img src="' + im.img + '" style="max-width:140px;"/>' +
         '<label>Image ID</label><input type="text" data-edit="l1img-' + si + '-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
         '<label>Replace image</label><input type="file" accept="image/*" data-upload="l1img-' + si + '-' + i + '"/>' +
+        '<label style="margin-top:10px;">Correct match (for scoring)</label>' +
+        '<select data-answer-key="l1-' + si + '-' + i + '">' + descOptions + '</select>' +
         '<button class="btn-secondary" style="margin-top:8px;" data-remove="l1img-' + si + '-' + i + '">Remove image</button>' +
       '</div>';
     });
@@ -1127,6 +1141,12 @@ function renderContentEditor(){
       '<img src="' + im.img + '" style="max-width:160px;"/>' +
       '<label>Image ID</label><input type="text" data-edit="l2img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label>Replace image</label><input type="file" accept="image/*" data-upload="l2img-' + i + '"/>' +
+      '<label style="margin-top:10px;">Correct answer (for scoring)</label>' +
+      '<select data-answer-key="l2-' + i + '">' +
+        '<option value="" ' + (!im.correctVerdict?'selected':'') + '>Not set</option>' +
+        '<option value="real" ' + (im.correctVerdict==='real'?'selected':'') + '>Real</option>' +
+        '<option value="fake" ' + (im.correctVerdict==='fake'?'selected':'') + '>Fake</option>' +
+      '</select>' +
       '<button class="btn-secondary" style="margin-top:8px;" data-remove="l2img-' + i + '">Remove image</button>' +
     '</div>';
   });
@@ -1135,13 +1155,16 @@ function renderContentEditor(){
   // Level 3: images each with own options
   out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2>';
   contentDraft.level3.images.forEach(function(im, i){
+    if(!im.correctOptions) im.correctOptions = [];
     out += '<div class="task-block">' +
       '<img src="' + im.img + '" style="max-width:160px;"/>' +
       '<label>Image ID</label><input type="text" data-edit="l3img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label>Replace image</label><input type="file" accept="image/*" data-upload="l3img-' + i + '"/>' +
-      '<label style="margin-top:10px;">Checkbox options</label>';
+      '<label style="margin-top:10px;">Checkbox options (edit text, and mark which are correct for scoring)</label>';
     im.options.forEach(function(o, j){
+      var isCorrect = im.correctOptions.indexOf(o.id) > -1;
       out += '<div class="row" style="margin-bottom:6px;">' +
+        '<input type="checkbox" style="width:16px; height:16px; flex-shrink:0;" data-answer-key="l3-' + i + '-' + j + '" ' + (isCorrect?'checked':'') + ' title="Mark as a correct answer"/>' +
         '<input type="text" style="flex:1; margin-bottom:0;" data-edit="l3opt-' + i + '-' + j + '" value="' + escapeHtml(o.text) + '"/>' +
         '<button class="btn-secondary" data-remove="l3opt-' + i + '-' + j + '">Remove</button>' +
       '</div>';
@@ -1159,6 +1182,60 @@ function renderContentEditor(){
   return out;
 }
 
+/* ---------- scoring against researcher-defined correct answers ---------- */
+function scoreLevel1(p){
+  var correct = 0, total = 0;
+  var bySet = (p.level1.draft && p.level1.draft.bySet) || {};
+  STUDY.level1.sets.forEach(function(set){
+    var answers = bySet[set.id] || {};
+    set.images.forEach(function(im){
+      if(im.correctDescId){
+        total++;
+        if(answers[im.id] === im.correctDescId) correct++;
+      }
+    });
+  });
+  return { correct: correct, total: total };
+}
+function scoreLevel2(p){
+  var correct = 0, total = 0;
+  var answers = (p.level2.draft && p.level2.draft.answers) || {};
+  STUDY.level2.images.forEach(function(im){
+    if(im.correctVerdict){
+      total++;
+      var a = answers[im.id];
+      if(a && a.verdict === im.correctVerdict) correct++;
+    }
+  });
+  return { correct: correct, total: total };
+}
+function scoreLevel3(p){
+  var correct = 0, total = 0;
+  var answers = (p.level3.draft && p.level3.draft.answers) || {};
+  STUDY.level3.images.forEach(function(im){
+    if(im.correctOptions && im.correctOptions.length){
+      total++;
+      var a = answers[im.id];
+      var sel = (a && a.selected) || [];
+      var same = sel.length === im.correctOptions.length && sel.every(function(s){ return im.correctOptions.indexOf(s) > -1; });
+      if(same) correct++;
+    }
+  });
+  return { correct: correct, total: total };
+}
+function formatScore(s){ return s.total > 0 ? (s.correct + "/" + s.total) : "\u2014"; }
+function isItemCorrect(kind, im, answerValue){
+  // returns true/false/null (null = no correct answer defined for this item)
+  if(kind === "l1"){ if(!im.correctDescId) return null; return answerValue === im.correctDescId; }
+  if(kind === "l2"){ if(!im.correctVerdict) return null; return answerValue === im.correctVerdict; }
+  if(kind === "l3"){
+    if(!im.correctOptions || !im.correctOptions.length) return null;
+    var sel = answerValue || [];
+    return sel.length === im.correctOptions.length && sel.every(function(s){ return im.correctOptions.indexOf(s) > -1; });
+  }
+  return null;
+}
+
 function labelForDesc(set, descId){
   var d = set.descriptions.filter(function(x){return x.id===descId;})[0];
   return d ? d.text : descId;
@@ -1174,31 +1251,48 @@ function formatDetail(p){
   out += '<div style="margin-bottom:10px;"><b>' + escapeHtml(p.name) + '</b> &middot; ' + p.id +
     '<br/><span style="color:var(--ink-soft);">Started ' + new Date(p.createdAt).toLocaleString() + '</span></div>';
 
-  out += '<div style="margin-bottom:12px;"><b>Level 1 \u2014 Matching</b>' + (p.level1.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
+  function answerChip(text, correctness){
+    var style = correctness === true ? 'background:var(--success-soft); color:var(--success);'
+      : correctness === false ? 'background:var(--danger-soft); color:var(--danger);'
+      : '';
+    return '<span style="' + style + ' padding:1px 6px; border-radius:5px;">' + text + '</span>';
+  }
+
+  var s1 = scoreLevel1(p);
+  out += '<div style="margin-bottom:12px;"><b>Level 1 \u2014 Matching</b>' + (p.level1.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + ' \u00b7 Score: ' + formatScore(s1) + '<br/>';
   var d1 = (p.level1.draft && p.level1.draft.bySet) || {};
   STUDY.level1.sets.forEach(function(set, si){
     out += '<i>Task ' + (si+1) + '</i><br/>';
     var setAnswers = d1[set.id] || {};
     set.images.forEach(function(im, i){
-      out += '&nbsp;&nbsp;' + (i+1) + '. Image ' + im.id + ' \u2192 ' + (setAnswers[im.id] ? escapeHtml(labelForDesc(set, setAnswers[im.id])) : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
+      var given = setAnswers[im.id];
+      var correctness = isItemCorrect("l1", im, given);
+      var text = given ? escapeHtml(labelForDesc(set, given)) : '<i style="color:var(--ink-soft);">no answer</i>';
+      out += '&nbsp;&nbsp;' + (i+1) + '. Image ' + im.id + ' \u2192 ' + answerChip(text, correctness) + '<br/>';
     });
   });
   out += '</div>';
 
-  out += '<div style="margin-bottom:12px;"><b>Level 2 \u2014 Real/Fake</b>' + (p.level2.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
+  var s2 = scoreLevel2(p);
+  out += '<div style="margin-bottom:12px;"><b>Level 2 \u2014 Real/Fake</b>' + (p.level2.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + ' \u00b7 Score: ' + formatScore(s2) + '<br/>';
   var d2 = (p.level2.draft && p.level2.draft.answers) || {};
   STUDY.level2.images.forEach(function(im, i){
     var a = d2[im.id];
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (a && a.verdict ? '<b>' + a.verdict.toUpperCase() + '</b>: ' + escapeHtml(a.reasoning||'') : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
+    var correctness = isItemCorrect("l2", im, a ? a.verdict : null);
+    var text = a && a.verdict ? '<b>' + a.verdict.toUpperCase() + '</b>: ' + escapeHtml(a.reasoning||'') : '<i style="color:var(--ink-soft);">no answer</i>';
+    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + answerChip(text, correctness) + '<br/>';
   });
   out += '</div>';
 
-  out += '<div><b>Level 3 \u2014 Options</b>' + (p.level3.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
+  var s3 = scoreLevel3(p);
+  out += '<div><b>Level 3 \u2014 Options</b>' + (p.level3.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + ' \u00b7 Score: ' + formatScore(s3) + '<br/>';
   var d3 = (p.level3.draft && p.level3.draft.answers) || {};
   STUDY.level3.images.forEach(function(im, i){
     var a = d3[im.id];
-    var sels = (a && a.selected && a.selected.length) ? a.selected.map(function(o){return labelForOpt(im.id,o);}).join(", ") : '<i style="color:var(--ink-soft);">no answer</i>';
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + escapeHtml(sels).replace(/&lt;i style=&quot;color:var\(--ink-soft\);&quot;&gt;/g,'<i style="color:var(--ink-soft);">').replace(/&lt;\/i&gt;/g,'</i>') + '<br/>';
+    var sel = (a && a.selected) || [];
+    var correctness = isItemCorrect("l3", im, sel);
+    var text = sel.length ? escapeHtml(sel.map(function(o){return labelForOpt(im.id,o);}).join(", ")) : '<i style="color:var(--ink-soft);">no answer</i>';
+    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + answerChip(text, correctness) + '<br/>';
   });
   out += '</div></div>';
   return out;
@@ -1213,19 +1307,90 @@ function downloadBlob(filename, content, mime){
   setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
 }
 
-function toCSV(list){
-  var rows = [["name","id","created_at","level1_completed","level1_answers","level2_completed","level2_answers","level3_completed","level3_answers"]];
-  list.forEach(function(p){
-    rows.push([
-      p.name, p.id, new Date(p.createdAt).toISOString(),
-      p.level1.completed, JSON.stringify(p.level1.draft||{}),
-      p.level2.completed, JSON.stringify(p.level2.draft||{}),
-      p.level3.completed, JSON.stringify(p.level3.draft||{})
-    ]);
+/* ---------- structured export: one column per image + a score column per section ---------- */
+function buildResultsMatrix(list){
+  var headers = ["Name", "ID"];
+  var colSpecs = [];
+
+  STUDY.level1.sets.forEach(function(set, si){
+    set.images.forEach(function(im, i){
+      headers.push("T" + (si+1) + " Image " + (i+1));
+      colSpecs.push(function(p){
+        var answers = (p.level1.draft && p.level1.draft.bySet && p.level1.draft.bySet[set.id]) || {};
+        var given = answers[im.id];
+        return { text: given ? labelForDesc(set, given) : "", correctness: isItemCorrect("l1", im, given) };
+      });
+    });
   });
+  headers.push("Level 1 Score");
+  colSpecs.push(function(p){ var s = scoreLevel1(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+
+  STUDY.level2.images.forEach(function(im, i){
+    headers.push("Image " + (i+1) + " (Real/Fake)");
+    colSpecs.push(function(p){
+      var answers = (p.level2.draft && p.level2.draft.answers) || {};
+      var a = answers[im.id];
+      return { text: a && a.verdict ? a.verdict : "", correctness: isItemCorrect("l2", im, a ? a.verdict : null) };
+    });
+  });
+  headers.push("Level 2 Score");
+  colSpecs.push(function(p){ var s = scoreLevel2(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+
+  STUDY.level3.images.forEach(function(im, i){
+    headers.push("Image " + (i+1) + " Selected");
+    colSpecs.push(function(p){
+      var answers = (p.level3.draft && p.level3.draft.answers) || {};
+      var a = answers[im.id];
+      var sel = (a && a.selected) || [];
+      var text = sel.map(function(o){ return labelForOpt(im.id, o); }).join("; ");
+      return { text: text, correctness: isItemCorrect("l3", im, sel) };
+    });
+  });
+  headers.push("Level 3 Score");
+  colSpecs.push(function(p){ var s = scoreLevel3(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+
+  headers.push("Total Score");
+  colSpecs.push(function(p){
+    var s1=scoreLevel1(p), s2=scoreLevel2(p), s3=scoreLevel3(p);
+    var correct = s1.correct+s2.correct+s3.correct, total = s1.total+s2.total+s3.total;
+    return { text: total ? (correct+"/"+total) : "\u2014", isScore:true, frac: total ? correct/total : null };
+  });
+
+  var rows = list.map(function(p){
+    return [{text:p.name}, {text:p.id}].concat(colSpecs.map(function(fn){ return fn(p); }));
+  });
+  return { headers: headers, rows: rows };
+}
+
+function toCSV(list){
+  var matrix = buildResultsMatrix(list);
+  var rows = [matrix.headers].concat(matrix.rows.map(function(cells){ return cells.map(function(c){ return c.text; }); }));
   return rows.map(function(r){
-    return r.map(function(v){ var s=String(v).replace(/"/g,'""'); return '"'+s+'"'; }).join(",");
+    return r.map(function(v){ var s = String(v==null?"":v).replace(/"/g,'""'); return '"'+s+'"'; }).join(",");
   }).join("\n");
+}
+
+function scoreCellColor(frac){
+  if(frac === null || frac === undefined) return "#ffffff";
+  if(frac >= 0.8) return "#d7f2df";
+  if(frac >= 0.5) return "#fff4cc";
+  return "#fbdad4";
+}
+// Produces an HTML table saved with an .xls extension \u2014 a well-supported
+// trick for getting real cell colors into Excel/Sheets without a binary
+// spreadsheet library. It's not a true .xlsx file, just HTML Excel can read.
+function toColorCodedExcelHtml(list){
+  var matrix = buildResultsMatrix(list);
+  var html = '<html><head><meta charset="utf-8"></head><body><table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px;">';
+  html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; text-align:left;">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
+  matrix.rows.forEach(function(cells){
+    html += '<tr>' + cells.map(function(c){
+      var bg = c.correctness === true ? "#d7f2df" : c.correctness === false ? "#fbdad4" : (c.isScore ? scoreCellColor(c.frac) : "#ffffff");
+      return '<td style="background:' + bg + ';">' + escapeHtml(c.text) + '</td>';
+    }).join('') + '</tr>';
+  });
+  html += '</table></body></html>';
+  return html;
 }
 
 /* ---------- event handlers ---------- */
@@ -1320,16 +1485,16 @@ function attachHandlers(){
   };
 
 
-  var exportJson = document.getElementById("exportJson");
-  if(exportJson) exportJson.onclick = function(){
-    downloadBlob("survey_results.json", JSON.stringify(researcherData, null, 2), "application/json");
-    showToast("Download started");
-  };
-
   var exportCsv = document.getElementById("exportCsv");
   if(exportCsv) exportCsv.onclick = function(){
     downloadBlob("survey_results.csv", toCSV(researcherData), "text/csv");
     showToast("Download started");
+  };
+
+  var exportExcel = document.getElementById("exportExcel");
+  if(exportExcel) exportExcel.onclick = function(){
+    downloadBlob("survey_results.xls", toColorCodedExcelHtml(researcherData), "application/vnd.ms-excel");
+    showToast("Download started \u2014 green = correct, red = incorrect");
   };
 
   app.querySelectorAll("[data-view-detail]").forEach(function(btn){
@@ -1477,6 +1642,27 @@ function attachHandlers(){
 
   /* ---------- content editor handlers ---------- */
   if(researcherTab === "content" && contentDraft){
+    app.querySelectorAll("[data-answer-key]").forEach(function(el){
+      var key = el.getAttribute("data-answer-key");
+      var m;
+      if(el.type === "checkbox"){
+        el.onchange = function(){
+          m = key.match(/^l3-(\d+)-(\d+)$/);
+          var im = contentDraft.level3.images[+m[1]];
+          var optId = im.options[+m[2]].id;
+          if(!im.correctOptions) im.correctOptions = [];
+          var idx = im.correctOptions.indexOf(optId);
+          if(el.checked && idx===-1) im.correctOptions.push(optId);
+          if(!el.checked && idx>-1) im.correctOptions.splice(idx,1);
+        };
+      } else {
+        el.onchange = function(){
+          if(m = key.match(/^l1-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].images[+m[2]].correctDescId = el.value || null;
+          else if(m = key.match(/^l2-(\d+)$/)) contentDraft.level2.images[+m[1]].correctVerdict = el.value || null;
+        };
+      }
+    });
+
     app.querySelectorAll("[data-edit]").forEach(function(inp){
       inp.oninput = function(){
         var key = inp.getAttribute("data-edit");
@@ -1516,7 +1702,15 @@ function attachHandlers(){
         else if(m = key.match(/^l1set-(\d+)$/)) contentDraft.level1.sets.splice(+m[1],1);
         else if(m = key.match(/^l2img-(\d+)$/)) contentDraft.level2.images.splice(+m[1],1);
         else if(m = key.match(/^l3img-(\d+)$/)) contentDraft.level3.images.splice(+m[1],1);
-        else if(m = key.match(/^l3opt-(\d+)-(\d+)$/)) contentDraft.level3.images[+m[1]].options.splice(+m[2],1);
+        else if(m = key.match(/^l3opt-(\d+)-(\d+)$/)){
+          var img3 = contentDraft.level3.images[+m[1]];
+          var removedOpt = img3.options[+m[2]];
+          img3.options.splice(+m[2],1);
+          if(removedOpt && img3.correctOptions){
+            var coIdx = img3.correctOptions.indexOf(removedOpt.id);
+            if(coIdx > -1) img3.correctOptions.splice(coIdx,1);
+          }
+        }
         render();
       };
     });
