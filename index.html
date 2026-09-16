@@ -3,268 +3,262 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Study Survey Portal</title>
+<title>Image Perception Study</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
   :root{
-    --bg:#f7f7fb;
-    --surface:#ffffff;
-    --surface-2:#f0f1f7;
-    --text:#1b1b23;
-    --text-muted:#63636f;
-    --border:#e2e2ea;
-    --accent:#4f46e5;
-    --accent-hover:#4338ca;
-    --accent-text:#ffffff;
-    --success:#16a34a;
-    --success-bg:#dcfce7;
-    --danger:#dc2626;
-    --danger-bg:#fee2e2;
-    --warn-bg:#fef9c3;
-    --warn-text:#854d0e;
-    --radius:14px;
-    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.05);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --paper:#F6F5F1;
+    --panel:#FFFFFF;
+    --panel-2:#EFEDE6;
+    --ink:#1B2430;
+    --ink-soft:#5B6270;
+    --line:#DDD8CC;
+    --line-strong:#C6C0B2;
+    --accent:#2F4B7C;
+    --accent-hover:#1F3559;
+    --accent-soft:#E7ECF4;
+    --gold:#9C7A2E;
+    --gold-soft:#F3ECD8;
+    --success:#3F7A5C;
+    --success-soft:#E4EFE8;
+    --danger:#A6412F;
+    --danger-soft:#F5E7E3;
+    --radius:6px;
+    --radius-lg:8px;
+    --serif: "Spectral", Georgia, "Times New Roman", serif;
+    --sans: "Public Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--sans);
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
-      --bg:#111116;
-      --surface:#1a1a22;
-      --surface-2:#22222c;
-      --text:#f1f1f5;
-      --text-muted:#a0a0ae;
-      --border:#2e2e3a;
-      --accent:#6366f1;
-      --accent-hover:#7678f5;
-      --accent-text:#ffffff;
-      --success:#4ade80;
-      --success-bg:#0f2b1a;
-      --danger:#f87171;
-      --danger-bg:#2c1414;
-      --warn-bg:#332b0d;
-      --warn-text:#facc15;
+      --paper:#14171C;
+      --panel:#1B1F26;
+      --panel-2:#20242C;
+      --ink:#EDEBE4;
+      --ink-soft:#9BA1AC;
+      --line:#333944;
+      --line-strong:#454C58;
+      --accent:#7FA0D6;
+      --accent-hover:#9CB6E2;
+      --accent-soft:#212A38;
+      --gold:#D6B15E;
+      --gold-soft:#2B2517;
+      --success:#7FB89A;
+      --success-soft:#17251E;
+      --danger:#E08A78;
+      --danger-soft:#2A1A17;
     }
   }
   :root[data-theme="dark"]{
-    --bg:#111116;
-    --surface:#1a1a22;
-    --surface-2:#22222c;
-    --text:#f1f1f5;
-    --text-muted:#a0a0ae;
-    --border:#2e2e3a;
-    --accent:#6366f1;
-    --accent-hover:#7678f5;
-    --accent-text:#ffffff;
-    --success:#4ade80;
-    --success-bg:#0f2b1a;
-    --danger:#f87171;
-    --danger-bg:#2c1414;
-    --warn-bg:#332b0d;
-    --warn-text:#facc15;
+    --paper:#14171C; --panel:#1B1F26; --panel-2:#20242C; --ink:#EDEBE4; --ink-soft:#9BA1AC;
+    --line:#333944; --line-strong:#454C58; --accent:#7FA0D6; --accent-hover:#9CB6E2;
+    --accent-soft:#212A38; --gold:#D6B15E; --gold-soft:#2B2517; --success:#7FB89A;
+    --success-soft:#17251E; --danger:#E08A78; --danger-soft:#2A1A17;
   }
-  *{box-sizing:border-box;}
+  *{ box-sizing:border-box; }
   body{
     margin:0;
-    background:var(--bg);
-    color:var(--text);
+    background:var(--paper);
+    color:var(--ink);
     min-height:100vh;
+    -webkit-font-smoothing:antialiased;
   }
-  #app{
-    max-width:760px;
-    margin:0 auto;
-    padding:24px 18px 80px;
-  }
+  #app{ max-width:800px; margin:0 auto; padding:0 20px 90px; }
+
+  /* ---------- header ---------- */
   .topbar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:10px 4px 22px;
-    flex-wrap:wrap;
-    gap:8px;
+    display:flex; justify-content:space-between; align-items:center;
+    padding:22px 2px; flex-wrap:wrap; gap:10px;
+    border-bottom:1px solid var(--line); margin-bottom:32px;
   }
   .brand{
-    font-weight:700;
-    font-size:15px;
-    letter-spacing:.01em;
-    color:var(--text-muted);
+    font-family:var(--serif); font-weight:600; font-size:18px; letter-spacing:.005em;
+    color:var(--ink);
   }
+  .brand .brand-sub{ display:block; font-family:var(--sans); font-weight:500; font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
   .whoami{
-    font-size:13px;
-    color:var(--text-muted);
-    background:var(--surface);
-    border:1px solid var(--border);
-    padding:6px 12px;
-    border-radius:999px;
-    display:flex;
-    align-items:center;
-    gap:8px;
+    font-size:13px; color:var(--ink-soft);
+    display:flex; align-items:center; gap:8px;
   }
-  .whoami b{ color:var(--text); }
+  .whoami b{ color:var(--ink); font-weight:600; }
+
+  /* ---------- surfaces ---------- */
   .card{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:28px;
-    box-shadow:var(--shadow);
-    margin-bottom:18px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius-lg);
+    padding:32px;
+    margin-bottom:20px;
   }
-  h1{ font-size:26px; margin:0 0 8px; }
-  h2{ font-size:20px; margin:0 0 6px; }
-  p.sub{ color:var(--text-muted); margin:0 0 20px; line-height:1.5;}
-  label{ display:block; font-size:13px; font-weight:600; margin-bottom:6px; color:var(--text-muted); }
+  h1{ font-family:var(--serif); font-weight:600; font-size:28px; line-height:1.25; margin:0 0 10px; letter-spacing:.001em; }
+  h2{ font-family:var(--serif); font-weight:600; font-size:20px; margin:0 0 6px; }
+  p.sub{ color:var(--ink-soft); margin:0 0 22px; line-height:1.55; max-width:62ch; font-size:14.5px; }
+  label{ display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:var(--ink-soft); }
+
   input[type=text]{
-    width:100%;
-    padding:11px 13px;
-    border-radius:10px;
-    border:1px solid var(--border);
-    background:var(--surface-2);
-    color:var(--text);
-    font-size:15px;
-    margin-bottom:14px;
+    width:100%; padding:10px 12px; border-radius:var(--radius);
+    border:1px solid var(--line-strong); background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:15px; margin-bottom:14px;
   }
-  input[type=text]:focus, textarea:focus, select:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  input[type=text]:focus, textarea:focus, select:focus{ outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
   textarea{
-    width:100%;
-    min-height:80px;
-    padding:11px 13px;
-    border-radius:10px;
-    border:1px solid var(--border);
-    background:var(--surface-2);
-    color:var(--text);
-    font-size:14px;
-    font-family:inherit;
-    resize:vertical;
+    width:100%; min-height:80px; padding:10px 12px; border-radius:var(--radius);
+    border:1px solid var(--line-strong); background:var(--paper); color:var(--ink);
+    font-size:14px; font-family:var(--sans); resize:vertical;
   }
   select{
-    width:100%;
-    padding:10px 12px;
-    border-radius:10px;
-    border:1px solid var(--border);
-    background:var(--surface-2);
-    color:var(--text);
-    font-size:14px;
+    width:100%; padding:9px 11px; border-radius:var(--radius);
+    border:1px solid var(--line-strong); background:var(--paper); color:var(--ink); font-size:14px; font-family:var(--sans);
   }
+
   button{
-    font-family:inherit;
-    cursor:pointer;
-    border:none;
-    border-radius:10px;
-    font-size:14.5px;
-    font-weight:600;
-    padding:11px 20px;
-    transition:background .15s ease, opacity .15s ease, transform .05s ease;
+    font-family:var(--sans); cursor:pointer; border:none; border-radius:var(--radius);
+    font-size:14px; font-weight:600; padding:10px 18px;
+    transition:background .15s ease, opacity .15s ease, border-color .15s ease;
   }
-  button:active{ transform:scale(0.98); }
-  .btn-primary{ background:var(--accent); color:var(--accent-text); }
+  button:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--accent); color:#fff; }
   .btn-primary:hover{ background:var(--accent-hover); }
-  .btn-primary:disabled{ opacity:.45; cursor:not-allowed; }
-  .btn-secondary{ background:var(--surface-2); color:var(--text); border:1px solid var(--border); }
-  .btn-secondary:hover{ background:var(--border); }
+  .btn-primary:disabled{ opacity:.4; cursor:not-allowed; }
+  .btn-secondary{ background:var(--panel); color:var(--ink); border:1px solid var(--line-strong); }
+  .btn-secondary:hover{ background:var(--panel-2); }
   .btn-text{ background:transparent; color:var(--accent); padding:8px 4px; }
+  .link-small{ font-size:12.5px; color:var(--ink-soft); text-decoration:underline; cursor:pointer; background:none; border:none; padding:0; }
+  .link-small:hover{ color:var(--ink); }
+
   .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
   .row.between{ justify-content:space-between; }
-  hr.sep{ border:none; border-top:1px solid var(--border); margin:22px 0; }
+  hr.sep{ border:none; border-top:1px solid var(--line); margin:26px 0; }
+
   .id-box{
-    background:var(--surface-2);
-    border:1px dashed var(--border);
-    border-radius:10px;
-    padding:14px 16px;
-    font-size:14px;
-    margin-bottom:18px;
+    border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:0 var(--radius) var(--radius) 0; background:var(--accent-soft);
+    padding:14px 16px; font-size:13.5px; margin-bottom:22px; color:var(--ink-soft);
   }
-  .id-box code{
-    font-size:16px;
-    font-weight:700;
-    color:var(--accent);
-    letter-spacing:.02em;
-  }
-  .level-list{ display:flex; flex-direction:column; gap:12px; }
+  .id-box code{ font-family:var(--sans); font-size:15px; font-weight:700; color:var(--accent); letter-spacing:.03em; }
+
+  /* ---------- progress rail (dashboard) ---------- */
+  .progress-rail{ display:flex; align-items:center; gap:0; margin-bottom:28px; }
+  .progress-rail .seg{ flex:1; height:4px; background:var(--line); }
+  .progress-rail .seg.done{ background:var(--accent); }
+  .progress-rail .seg:not(:last-child){ margin-right:4px; }
+
+  .level-list{ display:flex; flex-direction:column; }
   .level-item{
-    display:flex;
-    align-items:center;
-    gap:14px;
-    padding:16px 18px;
-    border:1px solid var(--border);
-    border-radius:12px;
-    background:var(--surface-2);
+    display:flex; align-items:center; gap:16px;
+    padding:20px 4px; border-bottom:1px solid var(--line);
   }
+  .level-item:last-child{ border-bottom:none; }
   .level-num{
-    width:36px; height:36px; border-radius:50%;
-    background:var(--surface); border:1px solid var(--border);
+    width:34px; height:34px; border-radius:50%; flex-shrink:0;
+    border:1.5px solid var(--line-strong); color:var(--ink-soft);
     display:flex; align-items:center; justify-content:center;
-    font-weight:700; font-size:14px; flex-shrink:0;
+    font-family:var(--serif); font-weight:600; font-size:15px;
   }
-  .level-num.done{ background:var(--success-bg); color:var(--success); border-color:transparent; }
+  .level-num.done{ background:var(--accent); color:#fff; border-color:var(--accent); }
   .level-info{ flex:1; min-width:0; }
   .level-info .t{ font-weight:600; font-size:15px; }
-  .level-info .s{ font-size:12.5px; color:var(--text-muted); margin-top:2px; }
-  .badge{
-    font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:999px;
-    text-transform:uppercase; letter-spacing:.03em;
-  }
-  .badge.done{ background:var(--success-bg); color:var(--success); }
-  .badge.progress{ background:var(--warn-bg); color:var(--warn-text); }
-  .badge.todo{ background:var(--border); color:var(--text-muted); }
+  .level-info .s{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+
+  .badge{ font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .badge.done{ background:var(--success-soft); color:var(--success); }
+  .badge.progress{ background:var(--gold-soft); color:var(--gold); }
+  .badge.todo{ background:var(--panel-2); color:var(--ink-soft); }
+
+  /* ---------- task blocks (levels 2 & 3) ---------- */
   .task-block{
-    border:1px solid var(--border);
-    border-radius:12px;
-    padding:18px;
-    margin-bottom:16px;
-    background:var(--surface-2);
+    border:1px solid var(--line); border-radius:var(--radius-lg);
+    padding:20px; margin-bottom:18px; background:var(--paper);
   }
   .task-block img{
-    width:100%;
-    max-width:260px;
-    border-radius:10px;
-    display:block;
-    margin-bottom:12px;
-    border:1px solid var(--border);
+    width:100%; max-width:280px; border-radius:var(--radius);
+    display:block; margin-bottom:14px; border:1px solid var(--line);
   }
-  .choice-row{ display:flex; gap:10px; margin-bottom:12px; }
+  .choice-row{ display:flex; gap:10px; margin-bottom:14px; }
   .choice-btn{
-    flex:1;
-    padding:10px;
-    border-radius:10px;
-    border:1.5px solid var(--border);
-    background:var(--surface);
-    color:var(--text);
-    font-weight:600;
-    text-align:center;
+    flex:1; padding:11px; border-radius:var(--radius); border:1.5px solid var(--line-strong);
+    background:var(--panel); color:var(--ink); font-weight:600; text-align:center; font-family:var(--sans);
   }
-  .choice-btn.selected-real{ border-color:var(--success); background:var(--success-bg); color:var(--success); }
-  .choice-btn.selected-fake{ border-color:var(--danger); background:var(--danger-bg); color:var(--danger); }
-  .checkbox-list{ display:flex; flex-direction:column; gap:8px; margin-top:4px;}
+  .choice-btn.selected-real{ border-color:var(--success); background:var(--success-soft); color:var(--success); }
+  .choice-btn.selected-fake{ border-color:var(--danger); background:var(--danger-soft); color:var(--danger); }
+
+  .checkbox-list{ display:flex; flex-direction:column; gap:8px; margin-top:4px; }
   .checkbox-item{
-    display:flex; align-items:center; gap:10px;
-    padding:9px 12px; border:1px solid var(--border); border-radius:9px; background:var(--surface);
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:var(--radius); background:var(--panel);
     font-size:14px; cursor:pointer;
   }
   .checkbox-item input{ width:16px; height:16px; accent-color:var(--accent); flex-shrink:0; }
-  .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:6px; }
+
+  /* ---------- level 1: two-column matching ---------- */
+  .match-grid{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start; }
+  .match-col-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:12px; text-transform:none; }
+  .match-images{ display:flex; flex-direction:column; gap:14px; }
+  .match-image-card{
+    border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--paper);
+    padding:14px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
+    display:flex; gap:12px; align-items:center;
+  }
+  .match-image-card:hover{ border-color:var(--line-strong); }
+  .match-image-card.active{ border-color:var(--accent); background:var(--accent-soft); }
+  .match-image-card img{ width:76px; height:76px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex-shrink:0; }
+  .match-image-card .info{ flex:1; min-width:0; }
+  .match-image-card .assign-note{ font-size:12px; color:var(--ink-soft); margin-top:3px; }
+  .match-image-card .assign-note.matched{ color:var(--ink); }
+  .match-badge{
+    width:28px; height:28px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-weight:700; font-size:13.5px; color:#fff;
+  }
+  .match-descs{ display:flex; flex-direction:column; gap:14px; }
+  .match-desc-row{
+    border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--panel);
+    padding:14px; cursor:pointer; display:flex; gap:12px; align-items:flex-start;
+    transition:border-color .15s ease, background .15s ease; font-size:13.5px; line-height:1.5;
+  }
+  .match-desc-row:hover{ border-color:var(--line-strong); }
+  .match-desc-row.awaiting{ border-style:dashed; }
+  .match-slot{
+    width:28px; height:28px; border-radius:50%; flex-shrink:0; margin-top:1px;
+    border:1.5px dashed var(--line-strong); display:flex; align-items:center; justify-content:center;
+    font-family:var(--serif); font-weight:700; font-size:13.5px; color:var(--ink-soft);
+  }
+  .match-hint{
+    font-size:12.5px; color:var(--ink-soft); background:var(--panel-2);
+    border-radius:var(--radius); padding:9px 12px; margin-bottom:18px;
+  }
+  @media (max-width:640px){
+    .match-grid{ grid-template-columns:1fr; gap:20px; }
+  }
+
+  .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
   .toast{
-    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
-    background:var(--text); color:var(--bg); padding:10px 18px; border-radius:999px;
-    font-size:13px; font-weight:600; box-shadow:var(--shadow); z-index:50;
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:10px 18px; border-radius:999px;
+    font-size:13px; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,.18); z-index:50;
     opacity:0; pointer-events:none; transition:opacity .25s ease;
   }
   .toast.show{ opacity:1; }
-  .link-small{ font-size:12.5px; color:var(--text-muted); text-decoration:underline; cursor:pointer; background:none; border:none; padding:0; }
+
   table.results{ width:100%; border-collapse:collapse; font-size:13px; }
-  table.results th, table.results td{ text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
-  table.results th{ color:var(--text-muted); font-weight:600; }
-  .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
-  .pill.done{ background:var(--success-bg); color:var(--success); }
-  .pill.todo{ background:var(--border); color:var(--text-muted); }
+  table.results th, table.results td{ text-align:left; padding:10px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.results th{ color:var(--ink-soft); font-weight:600; font-size:12px; }
+  .pill{ display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; }
+  .pill.done{ background:var(--success-soft); color:var(--success); }
+  .pill.todo{ background:var(--panel-2); color:var(--ink-soft); }
   .warn-banner{
-    background:var(--warn-bg); color:var(--warn-text); padding:10px 14px;
-    border-radius:10px; font-size:13px; margin-bottom:16px;
+    background:var(--danger-soft); color:var(--danger); padding:11px 14px;
+    border-radius:var(--radius); font-size:13px; margin-bottom:16px; border:1px solid transparent;
   }
-  ::placeholder{ color:var(--text-muted); opacity:.7; }
+  ::placeholder{ color:var(--ink-soft); opacity:.6; }
   @media (max-width:480px){
-    .card{ padding:20px; }
-    h1{ font-size:22px; }
+    .card{ padding:22px; }
+    h1{ font-size:23px; }
   }
 </style>
 </head>
@@ -346,20 +340,19 @@ var STUDY = cloneStudy(DEFAULT_STUDY); // overwritten by loadStudyConfig() once 
    FIREBASE CONFIG \u2014 paste the config object from your Firebase project
    (Project settings > Your apps > SDK setup and configuration) here.
    ========================================================================= */
-const firebaseConfig = {
-  apiKey: "AIzaSyDMN9jtxEEqLnMblHRWVMjq94EUp2ncV1k",
-  authDomain: "cxr-deepfake-survey.firebaseapp.com",
-  projectId: "cxr-deepfake-survey",
-  storageBucket: "cxr-deepfake-survey.firebasestorage.app",
-  messagingSenderId: "872922076064",
-  appId: "1:872922076064:web:987f3e49710ef3f9de0ac5",
-  measurementId: "G-VQJXLC4NKS"
+var firebaseConfig = {
+  apiKey: "PASTE_YOUR_API_KEY",
+  authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
+  projectId: "PASTE_YOUR_PROJECT_ID",
+  storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
+  messagingSenderId: "PASTE_YOUR_SENDER_ID",
+  appId: "PASTE_YOUR_APP_ID"
 };
 
 // The shared participant login (its PASSWORD is the passcode participants type in).
-var SHARED_LOGIN_EMAIL = "participant@deepfake.study.org";
+var SHARED_LOGIN_EMAIL = "participant@yourstudy.org";
 // Your own private researcher login (a real account only you know the password to).
-var RESEARCHER_LOGIN_EMAIL = "researcher@deepfake.study.org";
+var RESEARCHER_LOGIN_EMAIL = "researcher@yourstudy.org";
 
 /* ========================================================================= */
 
@@ -596,9 +589,9 @@ function el(html){
 function topbar(){
   if(!participant) return "";
   return '<div class="topbar">' +
-    '<div class="brand">STUDY SURVEY PORTAL</div>' +
+    '<div class="brand">Image Perception Study<span class="brand-sub">Research survey</span></div>' +
     '<div class="row" style="gap:10px;">' +
-      '<div class="whoami">Hi, <b>' + escapeHtml(participant.name) + '</b> &middot; ID: <b>' + participant.id + '</b></div>' +
+      '<div class="whoami">' + escapeHtml(participant.name) + ' &middot; <b>' + participant.id + '</b></div>' +
       '<button class="link-small" id="switchParticipant">Not you? Switch</button>' +
     '</div>' +
     '</div>';
@@ -658,19 +651,19 @@ function renderAuthGate(){
 function renderLanding(){
   return '' +
   '<div class="card">' +
-    '<h1>Welcome to the Study Survey</h1>' +
-    '<p class="sub">This survey has three short tasks. It takes about 5\u201310 minutes. You can save your progress at any point and come back later using your participant ID.</p>' +
+    '<h1>Image Perception Study</h1>' +
+    '<p class="sub">You\u2019ll complete three short tasks looking at a series of images \u2014 matching, judgment, and selection. It takes about 5\u201310 minutes, and you can save your progress and return later using a participant ID.</p>' +
     '<label for="nameInput">Your name</label>' +
     '<input type="text" id="nameInput" placeholder="e.g. Jordan Lee" />' +
-    '<button class="btn-primary" id="startBtn" style="width:100%;">Start Survey</button>' +
+    '<button class="btn-primary" id="startBtn" style="width:100%;">Begin</button>' +
   '</div>' +
   '<div class="card">' +
     '<h2>Already started?</h2>' +
-    '<p class="sub" style="margin-bottom:12px;">Enter the participant ID you were given to resume where you left off.</p>' +
+    '<p class="sub" style="margin-bottom:12px;">Enter the participant ID you were given when you began, to resume where you left off.</p>' +
     '<label for="resumeInput">Participant ID</label>' +
     '<input type="text" id="resumeInput" placeholder="e.g. P-7K2QXM" style="text-transform:uppercase;" />' +
     (lastError ? '<div class="warn-banner">' + escapeHtml(lastError) + '</div>' : '') +
-    '<button class="btn-secondary" id="resumeBtn" style="width:100%;">Resume Survey</button>' +
+    '<button class="btn-secondary" id="resumeBtn" style="width:100%;">Resume</button>' +
   '</div>';
 }
 
@@ -700,11 +693,15 @@ function renderDashboard(){
   }).join("");
 
   var doneCount = ['level1','level2','level3'].filter(function(k){return p[k].completed;}).length;
+  var rail = levels.map(function(l){
+    return '<div class="seg' + (p[l.key].completed ? ' done' : '') + '"></div>';
+  }).join("");
 
   return '<div class="card">' +
-    '<h2>Your Progress</h2>' +
-    '<p class="sub">All three tasks are available now, in any order. Complete all three to finish the survey.</p>' +
-    '<div class="id-box">Your participant ID is <code>' + p.id + '</code>. Save it &mdash; you can use it to resume this survey on any device.</div>' +
+    '<h2>Your progress</h2>' +
+    '<p class="sub">All three tasks are available now, in any order. Complete all three to finish the study.</p>' +
+    '<div class="progress-rail">' + rail + '</div>' +
+    '<div class="id-box">Your participant ID is <code>' + p.id + '</code>. Save it \u2014 you can use it to resume this survey on any device.</div>' +
     '<div class="level-list">' + items + '</div>' +
     (doneCount===3 ? '<hr class="sep"/><button class="btn-primary" id="finishBtn" style="width:100%;">View Completion Screen</button>' : '') +
   '</div>';
@@ -726,30 +723,55 @@ function renderLevel(key){
     '<p class="sub">' + conf.instructions + '</p>' +
     body +
     '<div class="footer-nav">' +
-      '<span style="font-size:12.5px; color:var(--text-muted);">' + (isDone ? 'Submitted' : 'Progress saves automatically') + '</span>' +
+      '<span style="font-size:12.5px; color:var(--ink-soft);">' + (isDone ? 'Submitted' : 'Progress saves automatically') + '</span>' +
       '<button class="btn-primary" id="submitLevelBtn" data-level="' + key + '" ' + (canSubmit? '' : 'disabled') + '>' + (isDone ? 'Update Submission' : 'Submit ' + capitalize(key)) + '</button>' +
     '</div>' +
   '</div>';
 }
 function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
+var MATCH_COLORS = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A','#7A5C3F'];
+function matchColor(i){ return MATCH_COLORS[i % MATCH_COLORS.length]; }
+var activeMatchImage = null; // id of the image currently selected for pairing
+
 function renderLevel1Body(){
   var conf = STUDY.level1;
   var draft = draftCache.level1;
-  return conf.images.map(function(im){
-    var current = draft[im.id] || "";
-    var options = conf.descriptions.map(function(d){
-      return '<option value="' + d.id + '" ' + (current===d.id?'selected':'') + '>' + escapeHtml(d.text) + '</option>';
-    }).join("");
-    return '<div class="task-block">' +
+  var imgIndex = {}; conf.images.forEach(function(im,i){ imgIndex[im.id]=i; });
+
+  var reverseMap = {}; // descId -> imgId
+  Object.keys(draft).forEach(function(imgId){ if(draft[imgId]) reverseMap[draft[imgId]] = imgId; });
+
+  var matchedCount = conf.images.filter(function(im){ return draft[im.id]; }).length;
+
+  var leftCol = conf.images.map(function(im, i){
+    var isActive = activeMatchImage === im.id;
+    var matchedDesc = draft[im.id] ? conf.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
+    return '<div class="match-image-card' + (isActive?' active':'') + '" data-match-img="' + im.id + '">' +
       '<img src="' + im.img + '" alt="stimulus image" />' +
-      '<label>Best matching description</label>' +
-      '<select data-l1-img="' + im.id + '">' +
-        '<option value="">Choose a description\u2026</option>' + options +
-      '</select>' +
+      '<div class="info">' +
+        '<div class="assign-note' + (matchedDesc?' matched':'') + '">' + (matchedDesc ? 'Matched to: \u201c' + escapeHtml(truncate(matchedDesc.text, 40)) + '\u201d' : (isActive ? 'Select a description on the right' : 'Tap to match')) + '</div>' +
+      '</div>' +
+      '<div class="match-badge" style="background:' + (matchedDesc ? matchColor(i) : (isActive ? '#8A8F98' : '#C6C0B2')) + ';">' + (i+1) + '</div>' +
     '</div>';
   }).join("");
+
+  var rightCol = conf.descriptions.map(function(d){
+    var pairedImgId = reverseMap[d.id];
+    var pairedIdx = pairedImgId ? imgIndex[pairedImgId] : -1;
+    return '<div class="match-desc-row' + (!pairedImgId ? ' awaiting' : '') + '" data-match-desc="' + d.id + '">' +
+      '<div class="match-slot"' + (pairedImgId ? ' style="border-style:solid; border-color:' + matchColor(pairedIdx) + '; background:' + matchColor(pairedIdx) + '; color:#fff;"' : '') + '>' + (pairedImgId ? (pairedIdx+1) : '') + '</div>' +
+      '<div>' + escapeHtml(d.text) + '</div>' +
+    '</div>';
+  }).join("");
+
+  return '<div class="match-hint">' + (matchedCount < conf.images.length ? 'Click an image, then click the description you think matches it.' : 'All images matched \u2014 click any pair to change it.') + '</div>' +
+  '<div class="match-grid">' +
+    '<div><div class="match-col-label">Images</div><div class="match-images">' + leftCol + '</div></div>' +
+    '<div><div class="match-col-label">Descriptions</div><div class="match-descs">' + rightCol + '</div></div>' +
+  '</div>';
 }
+function truncate(s, n){ return s.length > n ? s.slice(0,n-1) + '\u2026' : s; }
 
 function renderLevel2Body(){
   var conf = STUDY.level2;
@@ -937,12 +959,12 @@ function labelForOpt(imgId, optId){
 function formatDetail(p){
   var out = '<div style="font-size:13px; line-height:1.6;">';
   out += '<div style="margin-bottom:10px;"><b>' + escapeHtml(p.name) + '</b> &middot; ' + p.id +
-    '<br/><span style="color:var(--text-muted);">Started ' + new Date(p.createdAt).toLocaleString() + '</span></div>';
+    '<br/><span style="color:var(--ink-soft);">Started ' + new Date(p.createdAt).toLocaleString() + '</span></div>';
 
   out += '<div style="margin-bottom:12px;"><b>Level 1 \u2014 Matching</b>' + (p.level1.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
   var d1 = p.level1.draft || {};
   STUDY.level1.images.forEach(function(im, i){
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (d1[im.id] ? escapeHtml(labelForDesc(d1[im.id])) : '<i style="color:var(--text-muted);">no answer</i>') + '<br/>';
+    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (d1[im.id] ? escapeHtml(labelForDesc(d1[im.id])) : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
   });
   out += '</div>';
 
@@ -950,7 +972,7 @@ function formatDetail(p){
   var d2 = p.level2.draft || {};
   STUDY.level2.images.forEach(function(im, i){
     var a = d2[im.id];
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (a && a.verdict ? '<b>' + a.verdict.toUpperCase() + '</b>: ' + escapeHtml(a.reasoning||'') : '<i style="color:var(--text-muted);">no answer</i>') + '<br/>';
+    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (a && a.verdict ? '<b>' + a.verdict.toUpperCase() + '</b>: ' + escapeHtml(a.reasoning||'') : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
   });
   out += '</div>';
 
@@ -958,8 +980,8 @@ function formatDetail(p){
   var d3 = p.level3.draft || {};
   STUDY.level3.images.forEach(function(im, i){
     var a = d3[im.id];
-    var sels = (a && a.selected && a.selected.length) ? a.selected.map(function(o){return labelForOpt(im.id,o);}).join(", ") : '<i style="color:var(--text-muted);">no answer</i>';
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + escapeHtml(sels).replace(/&lt;i style=&quot;color:var\(--text-muted\);&quot;&gt;/g,'<i style="color:var(--text-muted);">').replace(/&lt;\/i&gt;/g,'</i>') + '<br/>';
+    var sels = (a && a.selected && a.selected.length) ? a.selected.map(function(o){return labelForOpt(im.id,o);}).join(", ") : '<i style="color:var(--ink-soft);">no answer</i>';
+    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + escapeHtml(sels).replace(/&lt;i style=&quot;color:var\(--ink-soft\);&quot;&gt;/g,'<i style="color:var(--ink-soft);">').replace(/&lt;\/i&gt;/g,'</i>') + '<br/>';
   });
   out += '</div></div>';
   return out;
@@ -1094,21 +1116,38 @@ function attachHandlers(){
   });
 
   app.querySelectorAll("[data-goto]").forEach(function(btn){
-    btn.onclick = function(){ screen = btn.getAttribute("data-goto"); render(); };
+    btn.onclick = function(){ activeMatchImage = null; screen = btn.getAttribute("data-goto"); render(); };
   });
 
   var finishBtn = document.getElementById("finishBtn");
   if(finishBtn) finishBtn.onclick = function(){ screen = "complete"; render(); };
 
   var backToDash = document.getElementById("backToDash");
-  if(backToDash) backToDash.onclick = function(){ screen = "dashboard"; render(); };
+  if(backToDash) backToDash.onclick = function(){ activeMatchImage = null; screen = "dashboard"; render(); };
 
-  // Level 1
-  app.querySelectorAll("[data-l1-img]").forEach(function(sel){
-    sel.onchange = function(){
-      var imgId = sel.getAttribute("data-l1-img");
-      if(sel.value) draftCache.level1[imgId] = sel.value; else delete draftCache.level1[imgId];
+  // Level 1: click an image, then click a description to pair them
+  app.querySelectorAll("[data-match-img]").forEach(function(card){
+    card.onclick = function(){
+      var imgId = card.getAttribute("data-match-img");
+      activeMatchImage = (activeMatchImage === imgId) ? null : imgId;
+      render();
+    };
+  });
+  app.querySelectorAll("[data-match-desc]").forEach(function(row){
+    row.onclick = function(){
+      var descId = row.getAttribute("data-match-desc");
+      if(!activeMatchImage){ showToast("Select an image first"); return; }
+      // enforce one description per image, and one image per description
+      Object.keys(draftCache.level1).forEach(function(imgId){
+        if(draftCache.level1[imgId] === descId) delete draftCache.level1[imgId];
+      });
+      draftCache.level1[activeMatchImage] = descId;
+      // auto-advance to the next unmatched image, if any
+      var conf = STUDY.level1;
+      var next = conf.images.filter(function(im){ return !draftCache.level1[im.id]; })[0];
+      activeMatchImage = next ? next.id : null;
       scheduleAutosave("level1");
+      render();
       renderSubmitState("level1");
     };
   });
