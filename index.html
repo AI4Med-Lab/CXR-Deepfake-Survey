@@ -236,6 +236,26 @@
     .match-grid{ grid-template-columns:1fr; gap:20px; }
   }
 
+  /* ---------- sequential task/item progress + transitions ---------- */
+  .subtask-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; gap:12px; }
+  .subtask-label{ font-size:12.5px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
+  .subtask-dots{ display:flex; gap:6px; }
+  .subtask-dots .dot{ width:7px; height:7px; border-radius:50%; background:var(--line-strong); }
+  .subtask-dots .dot.done{ background:var(--accent); }
+  .subtask-dots .dot.current{ background:var(--accent); transform:scale(1.35); }
+  .task-transition{ opacity:0; transform:translateY(8px); transition:opacity .32s ease, transform .32s ease; }
+  .task-transition.in{ opacity:1; transform:translateY(0); }
+  .continue-bar{ display:flex; justify-content:flex-end; margin-top:6px; }
+  @media (prefers-reduced-motion: reduce){
+    .task-transition{ transition:none; opacity:1; transform:none; }
+  }
+
+  /* ---------- editor: task-set grouping ---------- */
+  .set-block{
+    border:1.5px solid var(--line-strong); border-radius:var(--radius-lg);
+    padding:18px; margin-bottom:20px; background:var(--panel-2);
+  }
+
   .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
   .toast{
     position:fixed; bottom:22px; left:50%; transform:translateX(-50%);
@@ -286,20 +306,22 @@ function placeholderImg(bg, shape, label){
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
+function buildDefaultMatchSet(setNum, n){
+  var shapes = ['circle','square','triangle','blob'];
+  var colors = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A'];
+  var images = [], descriptions = [];
+  for(var i=0;i<n;i++){
+    images.push({ id: 's'+setNum+'img'+(i+1), img: placeholderImg(colors[i%colors.length], shapes[i%shapes.length], 'Set '+setNum+' \u00b7 '+(i+1)) });
+    descriptions.push({ id: 's'+setNum+'desc'+(i+1), text: 'Placeholder description ' + (i+1) + ' for matching task ' + setNum + ' \u2014 replace with real text.' });
+  }
+  return { id: 'set'+setNum, images: images, descriptions: descriptions };
+}
+
 var DEFAULT_STUDY = {
   level1: {
     title: "Level 1 \u2014 Match the Images",
-    instructions: "Look at each image below and select the description that matches it best.",
-    images: [
-      { id: "m1", img: placeholderImg('#4f46e5','circle','Image A') },
-      { id: "m2", img: placeholderImg('#ea580c','square','Image B') },
-      { id: "m3", img: placeholderImg('#059669','triangle','Image C') }
-    ],
-    descriptions: [
-      { id: "d1", text: "A round, continuous form often associated with unity and wholeness." },
-      { id: "d2", text: "A four-sided form often associated with stability and structure." },
-      { id: "d3", text: "A three-sided form often associated with direction and hierarchy." }
-    ]
+    instructions: "Look at the images below and match each one to the description you think fits it best.",
+    sets: [ buildDefaultMatchSet(1, 5), buildDefaultMatchSet(2, 5) ]
   },
   level2: {
     title: "Level 2 \u2014 Real or Fake?",
@@ -350,7 +372,6 @@ const firebaseConfig = {
   measurementId: "G-VQJXLC4NKS"
 };
 
-
 // The shared participant login (its PASSWORD is the passcode participants type in).
 var SHARED_LOGIN_EMAIL = "participant@deepfake.study.org";
 // Your own private researcher login (a real account only you know the password to).
@@ -367,17 +388,29 @@ var authMode = "participant"; // "participant" | "researcher"
 var isResearcherSession = false;
 var participant = null;   // {id, name, createdAt, updatedAt, level1, level2, level3}
 var screen = "loading";   // loading | landing | dashboard | level1 | level2 | level3 | complete | researcher
-var draftCache = {level1:{}, level2:{}, level3:{}};
+var draftCache = freshDraftCache();
 var saveTimers = {};
 var lastError = "";
 
-function emptyLevelState(){
-  return { completed:false, submittedAt:null, draft:{} };
+function emptyLevelState(key){
+  var draft = key === "level1" ? { bySet:{}, currentSet:0 } : { answers:{}, currentIndex:0 };
+  return { completed:false, submittedAt:null, draft:draft };
 }
 function newParticipant(name, id){
   var now = Date.now();
   return { id:id, name:name, createdAt:now, updatedAt:now,
-    level1: emptyLevelState(), level2: emptyLevelState(), level3: emptyLevelState() };
+    level1: emptyLevelState("level1"), level2: emptyLevelState("level2"), level3: emptyLevelState("level3") };
+}
+function freshDraftCache(){
+  return { level1:{bySet:{}, currentSet:0}, level2:{answers:{}, currentIndex:0}, level3:{answers:{}, currentIndex:0} };
+}
+function loadDraftFromParticipant(p){
+  var d1 = (p.level1 && p.level1.draft) || {};
+  var d2 = (p.level2 && p.level2.draft) || {};
+  var d3 = (p.level3 && p.level3.draft) || {};
+  draftCache.level1 = { bySet: d1.bySet || {}, currentSet: d1.currentSet || 0 };
+  draftCache.level2 = { answers: d2.answers || {}, currentIndex: d2.currentIndex || 0 };
+  draftCache.level3 = { answers: d3.answers || {}, currentIndex: d3.currentIndex || 0 };
 }
 function genId(){
   var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -404,13 +437,21 @@ function withAccessCode(obj){
   // on every doc for easy manual inspection in the Firebase console.
   return Object.assign({}, obj, { _study: "survey-portal" });
 }
+var backendOk = true; // whether the last Firestore write/read succeeded
+
 async function persistCreate(p){
   localSave(p);
-  try{ await fbDb.collection("participants").doc(p.id).set(withAccessCode(p)); }
-  catch(e){ console.error("firestore set failed", e); }
+  try{
+    await fbDb.collection("participants").doc(p.id).set(withAccessCode(p));
+    backendOk = true;
+  } catch(e){
+    console.error("firestore set failed", e);
+    backendOk = false;
+    showToast("Couldn't save to the server \u2014 saved on this device only");
+  }
 }
 async function persistUpdate(id, partial){
-  var current = participant;
+  var current = (participant && participant.id === id) ? participant : null;
   if(current){
     Object.keys(partial).forEach(function(k){
       if(typeof partial[k] === 'object' && !Array.isArray(partial[k]) && current[k]){
@@ -422,30 +463,47 @@ async function persistUpdate(id, partial){
     current.updatedAt = Date.now();
     localSave(current);
   }
-  try{ await fbDb.collection("participants").doc(id).set(Object.assign({}, partial, {updatedAt: Date.now()}), {merge:true}); }
-  catch(e){ console.error("firestore update failed", e); }
+  try{
+    await fbDb.collection("participants").doc(id).set(Object.assign({}, partial, {updatedAt: Date.now()}), {merge:true});
+    backendOk = true;
+  } catch(e){
+    console.error("firestore update failed", e);
+    backendOk = false;
+    showToast("Couldn't sync to the server \u2014 saved on this device only");
+  }
 }
 async function fetchParticipant(id){
   try{
     var snap = await fbDb.collection("participants").doc(id).get();
+    backendOk = true;
     if(snap.exists){ return snap.data(); }
-  }catch(e){ console.error("firestore get failed", e); }
+  }catch(e){
+    console.error("firestore get failed", e);
+    backendOk = false;
+  }
   return localLoad(id);
 }
+// Returns { data, error } rather than swallowing failures, so the researcher
+// panel can tell "genuinely zero participants" apart from "couldn't read at all".
 async function fetchAllParticipants(){
   try{
     var qs = await fbDb.collection("participants").limit(500).get();
     var out = [];
     qs.forEach(function(d){ out.push(d.data()); });
-    return out;
-  }catch(e){ console.error("firestore list failed", e); return null; }
+    return { data: out, error: null };
+  }catch(e){
+    console.error("firestore list failed", e);
+    return { data: [], error: (e && e.code) || (e && e.message) || "unknown error" };
+  }
 }
 
 /* ---------- survey content: stored in Firestore, editable by the researcher ---------- */
-function allImageIds(study){
-  return study.level1.images.map(function(im){return im.id;})
-    .concat(study.level2.images.map(function(im){return im.id;}))
-    .concat(study.level3.images.map(function(im){return im.id;}));
+function allImagesFlat(study){
+  var arr = [];
+  study.level1.sets.forEach(function(set){ set.images.forEach(function(im){ arr.push(im); }); });
+  study.level2.images.forEach(function(im){ arr.push(im); });
+  study.level3.images.forEach(function(im){ arr.push(im); });
+  return arr;
 }
 
 async function loadStudyConfig(){
@@ -460,10 +518,8 @@ async function loadStudyConfig(){
     var imgMap = {};
     qs.forEach(function(d){ imgMap[d.id] = d.data().dataUrl; });
 
-    [study.level1, study.level2, study.level3].forEach(function(level){
-      level.images.forEach(function(im){
-        if(imgMap[im.id]) im.img = imgMap[im.id];
-      });
+    allImagesFlat(study).forEach(function(im){
+      if(imgMap[im.id]) im.img = imgMap[im.id];
     });
     STUDY = study;
   }catch(e){ console.error("failed to load study config", e); }
@@ -474,13 +530,11 @@ async function saveStudyConfig(newStudy){
   // the main content doc small (just structure + text, no image bytes).
   var contentOnly = cloneStudy(newStudy);
   var writes = [];
-  [contentOnly.level1, contentOnly.level2, contentOnly.level3].forEach(function(level, li){
-    var full = [newStudy.level1, newStudy.level2, newStudy.level3][li];
-    level.images.forEach(function(im, i){
-      var dataUrl = full.images[i].img;
-      writes.push(fbDb.collection("studyImages").doc(im.id).set({ dataUrl: dataUrl, updatedAt: Date.now() }));
-      im.img = ""; // stripped from the content doc itself
-    });
+  var freshImages = allImagesFlat(newStudy);
+  var strippedImages = allImagesFlat(contentOnly);
+  strippedImages.forEach(function(im, i){
+    writes.push(fbDb.collection("studyImages").doc(im.id).set({ dataUrl: freshImages[i].img, updatedAt: Date.now() }));
+    im.img = ""; // stripped from the content doc itself
   });
   writes.push(fbDb.collection("studyConfig").doc("content").set({ study: contentOnly, updatedAt: Date.now() }));
   await Promise.all(writes);
@@ -514,10 +568,12 @@ function fileToResizedDataUrl(file, maxDim, quality){
 
 function scheduleAutosave(levelKey){
   clearTimeout(saveTimers[levelKey]);
+  var pid = participant ? participant.id : null;
   saveTimers[levelKey] = setTimeout(function(){
+    if(!pid) return; // participant session ended before the debounce fired
     var payload = {};
     payload[levelKey] = { draft: draftCache[levelKey] };
-    persistUpdate(participant.id, payload);
+    persistUpdate(pid, payload);
     showToast("Progress saved");
   }, 600);
 }
@@ -538,7 +594,9 @@ async function afterAuth(){
   await loadStudyConfig();
 
   if(isResearcherSession){
-    researcherData = (await fetchAllParticipants()) || [];
+    var res = await fetchAllParticipants();
+    researcherData = res.data;
+    researcherLoadError = res.error;
     researcherTab = "results";
     screen = "researcher-panel";
     render();
@@ -549,7 +607,7 @@ async function afterAuth(){
   try{ savedId = localStorage.getItem("survey_last_id"); }catch(e){}
   if(savedId){
     var p = await fetchParticipant(savedId);
-    if(p){ participant = p; draftCache.level1 = p.level1.draft||{}; draftCache.level2 = p.level2.draft||{}; draftCache.level3 = p.level3.draft||{}; screen = allDone(p) ? "complete" : "dashboard"; render(); return; }
+    if(p){ participant = p; loadDraftFromParticipant(p); screen = allDone(p) ? "complete" : "dashboard"; render(); return; }
   }
   screen = "landing";
   render();
@@ -605,6 +663,22 @@ function escapeHtml(s){
   });
 }
 
+function progressKey(scr){
+  if(scr === "level1") return "l1:" + draftCache.level1.currentSet;
+  if(scr === "level2") return "l2:" + draftCache.level2.currentIndex;
+  if(scr === "level3") return "l3:" + draftCache.level3.currentIndex;
+  return scr;
+}
+var lastAnimKey = null;
+function triggerEnterAnimation(id){
+  var elm = document.getElementById(id);
+  if(!elm) return;
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){ elm.classList.add("in"); });
+  });
+  setTimeout(function(){ if(elm) elm.classList.add("in"); }, 500); // safety net
+}
+
 function render(){
   var app = document.getElementById("app");
   var html = "";
@@ -625,6 +699,16 @@ function render(){
   }
   app.innerHTML = html;
   attachHandlers();
+
+  if(screen === "level1" || screen === "level2" || screen === "level3"){
+    var key = progressKey(screen);
+    if(key !== lastAnimKey){
+      lastAnimKey = key;
+      triggerEnterAnimation("taskAnim");
+    }
+  } else {
+    lastAnimKey = null;
+  }
 }
 
 function renderAuthGate(){
@@ -673,7 +757,8 @@ function renderLanding(){
 function levelStatus(p, key){
   if(p[key].completed) return "done";
   var d = p[key].draft;
-  if(d && Object.keys(d).length>0) return "progress";
+  var hasAny = key === "level1" ? Object.keys(d.bySet||{}).length > 0 : Object.keys(d.answers||{}).length > 0;
+  if(hasAny) return "progress";
   return "todo";
 }
 function statusLabel(s){ return s==="done"?"Completed":s==="progress"?"In progress":"Not started"; }
@@ -703,6 +788,7 @@ function renderDashboard(){
   return '<div class="card">' +
     '<h2>Your progress</h2>' +
     '<p class="sub">All three tasks are available now, in any order. Complete all three to finish the study.</p>' +
+    (backendOk ? '' : '<div class="warn-banner">Your progress isn\u2019t reaching the server right now (it\u2019s only saved on this device). If you switch devices you may lose it. Try reloading the page \u2014 if this keeps happening, let the researcher know.</div>') +
     '<div class="progress-rail">' + rail + '</div>' +
     '<div class="id-box">Your participant ID is <code>' + p.id + '</code>. Save it \u2014 you can use it to resume this survey on any device.</div>' +
     '<div class="level-list">' + items + '</div>' +
@@ -737,19 +823,34 @@ var MATCH_COLORS = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A','#7A5C3F']
 function matchColor(i){ return MATCH_COLORS[i % MATCH_COLORS.length]; }
 var activeMatchImage = null; // id of the image currently selected for pairing
 
+function subtaskBar(label, total, currentIndex){
+  var dots = "";
+  for(var i=0;i<total;i++){
+    dots += '<div class="dot' + (i<currentIndex?' done':'') + (i===currentIndex?' current':'') + '"></div>';
+  }
+  return '<div class="subtask-bar"><div class="subtask-label">' + label + '</div><div class="subtask-dots">' + dots + '</div></div>';
+}
+
 function renderLevel1Body(){
   var conf = STUDY.level1;
-  var draft = draftCache.level1;
-  var imgIndex = {}; conf.images.forEach(function(im,i){ imgIndex[im.id]=i; });
+  var sets = conf.sets;
+  if(!sets || sets.length === 0){
+    return '<div class="task-transition in" id="taskAnim"><p class="sub">This task hasn\u2019t been set up yet. Please check back later.</p></div>';
+  }
+  var si = Math.min(draftCache.level1.currentSet || 0, sets.length - 1);
+  var set = sets[si];
+  if(!draftCache.level1.bySet[set.id]) draftCache.level1.bySet[set.id] = {};
+  var draft = draftCache.level1.bySet[set.id];
 
+  var imgIndex = {}; set.images.forEach(function(im,i){ imgIndex[im.id]=i; });
   var reverseMap = {}; // descId -> imgId
   Object.keys(draft).forEach(function(imgId){ if(draft[imgId]) reverseMap[draft[imgId]] = imgId; });
+  var matchedCount = set.images.filter(function(im){ return draft[im.id]; }).length;
+  var setComplete = matchedCount === set.images.length;
 
-  var matchedCount = conf.images.filter(function(im){ return draft[im.id]; }).length;
-
-  var leftCol = conf.images.map(function(im, i){
+  var leftCol = set.images.map(function(im, i){
     var isActive = activeMatchImage === im.id;
-    var matchedDesc = draft[im.id] ? conf.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
+    var matchedDesc = draft[im.id] ? set.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
     return '<div class="match-image-card' + (isActive?' active':'') + '" data-match-img="' + im.id + '">' +
       '<img src="' + im.img + '" alt="stimulus image" />' +
       '<div class="info">' +
@@ -759,7 +860,7 @@ function renderLevel1Body(){
     '</div>';
   }).join("");
 
-  var rightCol = conf.descriptions.map(function(d){
+  var rightCol = set.descriptions.map(function(d){
     var pairedImgId = reverseMap[d.id];
     var pairedIdx = pairedImgId ? imgIndex[pairedImgId] : -1;
     return '<div class="match-desc-row' + (!pairedImgId ? ' awaiting' : '') + '" data-match-desc="' + d.id + '">' +
@@ -768,20 +869,42 @@ function renderLevel1Body(){
     '</div>';
   }).join("");
 
-  return '<div class="match-hint">' + (matchedCount < conf.images.length ? 'Click an image, then click the description you think matches it.' : 'All images matched \u2014 click any pair to change it.') + '</div>' +
-  '<div class="match-grid">' +
-    '<div><div class="match-col-label">Images</div><div class="match-images">' + leftCol + '</div></div>' +
-    '<div><div class="match-col-label">Descriptions</div><div class="match-descs">' + rightCol + '</div></div>' +
+  var isLastSet = si === sets.length - 1;
+  var continueBtn = (setComplete && !isLastSet)
+    ? '<div class="continue-bar"><button class="btn-primary" id="continueMatchSet">Continue to next matching task \u2192</button></div>'
+    : "";
+  var backLink = si > 0 ? '<button class="link-small" id="prevMatchSet" style="margin-bottom:14px;">&larr; Previous matching task</button>' : "";
+
+  return subtaskBar('Matching task ' + (si+1) + ' of ' + sets.length, sets.length, si) +
+  '<div class="task-transition" id="taskAnim">' +
+    backLink +
+    '<div class="match-hint">' + (matchedCount < set.images.length ? 'Click an image, then click the description you think matches it.' : (isLastSet ? 'All images matched \u2014 click any pair to change it.' : 'Task complete \u2014 continue when you\u2019re ready.')) + '</div>' +
+    '<div class="match-grid">' +
+      '<div><div class="match-col-label">Images</div><div class="match-images">' + leftCol + '</div></div>' +
+      '<div><div class="match-col-label">Descriptions</div><div class="match-descs">' + rightCol + '</div></div>' +
+    '</div>' +
+    continueBtn +
   '</div>';
 }
 function truncate(s, n){ return s.length > n ? s.slice(0,n-1) + '\u2026' : s; }
 
 function renderLevel2Body(){
   var conf = STUDY.level2;
-  var draft = draftCache.level2;
-  return conf.images.map(function(im){
-    var cur = draft[im.id] || {verdict:"", reasoning:""};
-    return '<div class="task-block">' +
+  if(!conf.images || conf.images.length === 0){
+    return '<div class="task-transition in" id="taskAnim"><p class="sub">This task hasn\u2019t been set up yet. Please check back later.</p></div>';
+  }
+  var idx = Math.min(draftCache.level2.currentIndex || 0, conf.images.length - 1);
+  var im = conf.images[idx];
+  var cur = draftCache.level2.answers[im.id] || {verdict:"", reasoning:""};
+  var answered = itemIsAnswered("level2", im.id);
+  var isLast = idx === conf.images.length - 1;
+  var backLink = idx > 0 ? '<button class="link-small" id="prevL2" style="margin-bottom:14px;">&larr; Previous image</button>' : "";
+  var nextBtn = !isLast ? '<div class="continue-bar"><button class="btn-primary" id="nextL2" ' + (answered?'':'disabled') + '>Next image \u2192</button></div>' : "";
+
+  return subtaskBar('Image ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
+  '<div class="task-transition" id="taskAnim">' +
+    backLink +
+    '<div class="task-block">' +
       '<img src="' + im.img + '" alt="stimulus image" />' +
       '<label>Is this image real or fake?</label>' +
       '<div class="choice-row">' +
@@ -790,45 +913,69 @@ function renderLevel2Body(){
       '</div>' +
       '<label>Why do you think so?</label>' +
       '<textarea placeholder="Briefly explain your reasoning\u2026" data-l2-reason="' + im.id + '">' + escapeHtml(cur.reasoning||"") + '</textarea>' +
-    '</div>';
-  }).join("");
+    '</div>' +
+    nextBtn +
+  '</div>';
 }
 
 function renderLevel3Body(){
   var conf = STUDY.level3;
-  var draft = draftCache.level3;
-  return conf.images.map(function(im){
-    var selected = (draft[im.id] && draft[im.id].selected) || [];
-    var opts = im.options.map(function(o){
-      var checked = selected.indexOf(o.id) > -1;
-      return '<label class="checkbox-item"><input type="checkbox" data-l3-opt="' + im.id + '::' + o.id + '" ' + (checked?'checked':'') + '/> ' + escapeHtml(o.text) + '</label>';
-    }).join("");
-    return '<div class="task-block">' +
+  if(!conf.images || conf.images.length === 0){
+    return '<div class="task-transition in" id="taskAnim"><p class="sub">This task hasn\u2019t been set up yet. Please check back later.</p></div>';
+  }
+  var idx = Math.min(draftCache.level3.currentIndex || 0, conf.images.length - 1);
+  var im = conf.images[idx];
+  var selected = (draftCache.level3.answers[im.id] && draftCache.level3.answers[im.id].selected) || [];
+  var answered = itemIsAnswered("level3", im.id);
+  var isLast = idx === conf.images.length - 1;
+  var backLink = idx > 0 ? '<button class="link-small" id="prevL3" style="margin-bottom:14px;">&larr; Previous image</button>' : "";
+  var nextBtn = !isLast ? '<div class="continue-bar"><button class="btn-primary" id="nextL3" ' + (answered?'':'disabled') + '>Next image \u2192</button></div>' : "";
+
+  var opts = im.options.map(function(o){
+    var checked = selected.indexOf(o.id) > -1;
+    return '<label class="checkbox-item"><input type="checkbox" data-l3-opt="' + im.id + '::' + o.id + '" ' + (checked?'checked':'') + '/> ' + escapeHtml(o.text) + '</label>';
+  }).join("");
+
+  return subtaskBar('Image ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
+  '<div class="task-transition" id="taskAnim">' +
+    backLink +
+    '<div class="task-block">' +
       '<img src="' + im.img + '" alt="stimulus image" />' +
       '<label>Select all relevant option(s)</label>' +
       '<div class="checkbox-list">' + opts + '</div>' +
-    '</div>';
-  }).join("");
+    '</div>' +
+    nextBtn +
+  '</div>';
 }
 
 function levelIsComplete(key){
   var conf = STUDY[key];
   var draft = draftCache[key];
   if(key === "level1"){
-    return conf.images.every(function(im){ return draft[im.id]; });
+    return conf.sets.every(function(set){
+      var answers = draft.bySet[set.id] || {};
+      return set.images.every(function(im){ return !!answers[im.id]; });
+    });
   }
   if(key === "level2"){
     return conf.images.every(function(im){
-      var d = draft[im.id];
+      var d = draft.answers[im.id];
       return d && d.verdict && d.reasoning && d.reasoning.trim().length >= 3;
     });
   }
   if(key === "level3"){
     return conf.images.every(function(im){
-      var d = draft[im.id];
+      var d = draft.answers[im.id];
       return d && d.selected && d.selected.length > 0;
     });
   }
+  return false;
+}
+function itemIsAnswered(key, imgId){
+  var draft = draftCache[key].answers;
+  var d = draft[imgId];
+  if(key === "level2") return !!(d && d.verdict && d.reasoning && d.reasoning.trim().length >= 3);
+  if(key === "level3") return !!(d && d.selected && d.selected.length > 0);
   return false;
 }
 
@@ -836,6 +983,7 @@ function renderComplete(){
   return '<div class="card" style="text-align:center;">' +
     '<h1>\uD83C\uDF89 Thank you, ' + escapeHtml(participant.name) + '!</h1>' +
     '<p class="sub">You\u2019ve completed all three tasks. Your responses have been recorded under participant ID <code>' + participant.id + '</code>.</p>' +
+    (backendOk ? '' : '<div class="warn-banner" style="text-align:left;">Heads up: your last save couldn\u2019t reach the server, so this submission may only exist on this device. Please tell the researcher your participant ID (' + participant.id + ') just in case.</div>') +
     '<p class="sub">You may close this window now, or review your answers below.</p>' +
     '<div class="row" style="justify-content:center;">' +
       '<button class="btn-secondary" id="reviewAnswersBtn">Review My Answers</button>' +
@@ -844,6 +992,7 @@ function renderComplete(){
 }
 
 var researcherData = [];
+var researcherLoadError = null;
 var researcherTab = "results"; // "results" | "content"
 var contentDraft = null; // working copy of STUDY while editing, null when not editing
 
@@ -880,7 +1029,9 @@ function renderResearcherPanel(){
         '<button class="btn-primary" id="exportJson">Export JSON</button>' +
       '</div>' +
     '</div>' +
-    '<p class="sub">' + researcherData.length + ' participant(s) recorded.' + '</p>' +
+    (researcherLoadError
+      ? '<div class="warn-banner">Couldn\u2019t load results from the server (' + escapeHtml(String(researcherLoadError)) + '). This usually means the Firestore rules or the email addresses in the file don\u2019t match what\u2019s in Firebase Authentication \u2014 check the browser console for details, then hit Refresh.</div>'
+      : '<p class="sub">' + researcherData.length + ' participant(s) recorded.' + '</p>') +
     (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
     '<div id="detailPane" style="margin-top:16px;"></div>' +
   '</div>';
@@ -890,25 +1041,38 @@ function renderContentEditor(){
   if(!contentDraft) contentDraft = cloneStudy(STUDY);
   var out = '<p class="sub">Edit images, descriptions and options below, then Save. Changes apply to every participant immediately \u2014 including anyone mid-survey, next time they load a page.</p>';
 
-  // Level 1: images + shared descriptions
-  out += '<h2>Level 1 \u2014 Matching</h2><p class="sub">Images</p>';
-  contentDraft.level1.images.forEach(function(im, i){
-    out += '<div class="task-block">' +
-      '<img src="' + im.img + '" style="max-width:160px;"/>' +
-      '<label>Image ID</label><input type="text" data-edit="l1img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
-      '<label>Replace image</label><input type="file" accept="image/*" data-upload="l1img-' + i + '"/>' +
-      '<button class="btn-secondary" style="margin-top:8px;" data-remove="l1img-' + i + '">Remove image</button>' +
-    '</div>';
+  // Level 1: one or more independent matching tasks, each with its own images + descriptions
+  out += '<h2>Level 1 \u2014 Matching Tasks</h2><p class="sub">Participants complete each matching task in order \u2014 the next one only appears once the current one is finished.</p>';
+  contentDraft.level1.sets.forEach(function(set, si){
+    out += '<div class="set-block">' +
+      '<div class="row between" style="margin-bottom:12px;"><h2 style="font-size:16px; margin:0;">Task ' + (si+1) + '</h2>' +
+        '<button class="btn-secondary" data-remove="l1set-' + si + '">Remove this task</button></div>' +
+      '<p class="sub" style="margin-bottom:10px;">Images</p>';
+    set.images.forEach(function(im, i){
+      out += '<div class="task-block">' +
+        '<img src="' + im.img + '" style="max-width:140px;"/>' +
+        '<label>Image ID</label><input type="text" data-edit="l1img-' + si + '-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
+        '<label>Replace image</label><input type="file" accept="image/*" data-upload="l1img-' + si + '-' + i + '"/>' +
+        '<button class="btn-secondary" style="margin-top:8px;" data-remove="l1img-' + si + '-' + i + '">Remove image</button>' +
+      '</div>';
+    });
+    out += '<button class="btn-secondary" data-add="l1img-' + si + '">+ Add image to this task</button>';
+    out += '<p class="sub" style="margin:16px 0 8px;">Descriptions</p>';
+    set.descriptions.forEach(function(d, i){
+      out += '<div class="row" style="margin-bottom:8px;">' +
+        '<input type="text" style="flex:1; margin-bottom:0;" data-edit="l1desc-' + si + '-' + i + '" value="' + escapeHtml(d.text) + '"/>' +
+        '<button class="btn-secondary" data-remove="l1desc-' + si + '-' + i + '">Remove</button>' +
+      '</div>';
+    });
+    out += '<button class="btn-secondary" data-add="l1desc-' + si + '">+ Add description to this task</button>';
+    out += '</div>';
   });
-  out += '<button class="btn-secondary" id="addL1Img">+ Add image</button>';
-  out += '<hr class="sep"/><p class="sub">Descriptions (shown as dropdown choices)</p>';
-  contentDraft.level1.descriptions.forEach(function(d, i){
-    out += '<div class="row" style="margin-bottom:8px;">' +
-      '<input type="text" style="flex:1; margin-bottom:0;" data-edit="l1desc-' + i + '" value="' + escapeHtml(d.text) + '"/>' +
-      '<button class="btn-secondary" data-remove="l1desc-' + i + '">Remove</button>' +
-    '</div>';
-  });
-  out += '<button class="btn-secondary" id="addL1Desc">+ Add description</button>';
+  out += '<div class="row" style="align-items:center;">' +
+    '<label style="margin:0;">Size:</label>' +
+    '<input type="text" id="newSetSize" value="5" style="width:60px; margin-bottom:0;" />' +
+    '<button class="btn-primary" id="addL1Set">+ Add matching task</button>' +
+  '</div>' +
+  '<p class="sub" style="margin-top:6px;">Creates a new task with that many images and that many descriptions (e.g. 5 \u2192 a 5\u00d75 matching task). You can still add or remove individual images/descriptions afterward.</p>';
 
   // Level 2: images (real/fake)
   out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2>';
@@ -949,8 +1113,8 @@ function renderContentEditor(){
   return out;
 }
 
-function labelForDesc(descId){
-  var d = STUDY.level1.descriptions.filter(function(x){return x.id===descId;})[0];
+function labelForDesc(set, descId){
+  var d = set.descriptions.filter(function(x){return x.id===descId;})[0];
   return d ? d.text : descId;
 }
 function labelForOpt(imgId, optId){
@@ -965,14 +1129,18 @@ function formatDetail(p){
     '<br/><span style="color:var(--ink-soft);">Started ' + new Date(p.createdAt).toLocaleString() + '</span></div>';
 
   out += '<div style="margin-bottom:12px;"><b>Level 1 \u2014 Matching</b>' + (p.level1.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
-  var d1 = p.level1.draft || {};
-  STUDY.level1.images.forEach(function(im, i){
-    out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (d1[im.id] ? escapeHtml(labelForDesc(d1[im.id])) : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
+  var d1 = (p.level1.draft && p.level1.draft.bySet) || {};
+  STUDY.level1.sets.forEach(function(set, si){
+    out += '<i>Task ' + (si+1) + '</i><br/>';
+    var setAnswers = d1[set.id] || {};
+    set.images.forEach(function(im, i){
+      out += '&nbsp;&nbsp;' + (i+1) + '. Image ' + im.id + ' \u2192 ' + (setAnswers[im.id] ? escapeHtml(labelForDesc(set, setAnswers[im.id])) : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
+    });
   });
   out += '</div>';
 
   out += '<div style="margin-bottom:12px;"><b>Level 2 \u2014 Real/Fake</b>' + (p.level2.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
-  var d2 = p.level2.draft || {};
+  var d2 = (p.level2.draft && p.level2.draft.answers) || {};
   STUDY.level2.images.forEach(function(im, i){
     var a = d2[im.id];
     out += (i+1) + '. Image ' + im.id + ' \u2192 ' + (a && a.verdict ? '<b>' + a.verdict.toUpperCase() + '</b>: ' + escapeHtml(a.reasoning||'') : '<i style="color:var(--ink-soft);">no answer</i>') + '<br/>';
@@ -980,7 +1148,7 @@ function formatDetail(p){
   out += '</div>';
 
   out += '<div><b>Level 3 \u2014 Options</b>' + (p.level3.completed ? ' <span class="pill done">Done</span>' : ' <span class="pill todo">Pending</span>') + '<br/>';
-  var d3 = p.level3.draft || {};
+  var d3 = (p.level3.draft && p.level3.draft.answers) || {};
   STUDY.level3.images.forEach(function(im, i){
     var a = d3[im.id];
     var sels = (a && a.selected && a.selected.length) ? a.selected.map(function(o){return labelForOpt(im.id,o);}).join(", ") : '<i style="color:var(--ink-soft);">no answer</i>';
@@ -1041,7 +1209,7 @@ function attachHandlers(){
     lastError = "";
     var id = genId();
     participant = newParticipant(name, id);
-    draftCache = {level1:{}, level2:{}, level3:{}};
+    draftCache = freshDraftCache();
     await persistCreate(participant);
     try{ localStorage.setItem("survey_last_id", id); }catch(e){}
     screen = "dashboard";
@@ -1056,9 +1224,7 @@ function attachHandlers(){
     if(!p){ lastError = "No survey found for that ID. Double-check it and try again."; render(); return; }
     lastError = "";
     participant = p;
-    draftCache.level1 = p.level1.draft || {};
-    draftCache.level2 = p.level2.draft || {};
-    draftCache.level3 = p.level3.draft || {};
+    loadDraftFromParticipant(p);
     try{ localStorage.setItem("survey_last_id", p.id); }catch(e){}
     screen = allDone(p) ? "complete" : "dashboard";
     render();
@@ -1068,7 +1234,7 @@ function attachHandlers(){
   if(switchParticipant) switchParticipant.onclick = function(){
     try{ localStorage.removeItem("survey_last_id"); }catch(e){}
     participant = null;
-    draftCache = {level1:{}, level2:{}, level3:{}};
+    draftCache = freshDraftCache();
     lastError = "";
     screen = "landing";
     render();
@@ -1100,9 +1266,11 @@ function attachHandlers(){
 
   var refreshData = document.getElementById("refreshData");
   if(refreshData) refreshData.onclick = async function(){
-    researcherData = (await fetchAllParticipants()) || [];
+    var res = await fetchAllParticipants();
+    researcherData = res.data;
+    researcherLoadError = res.error;
     render();
-    showToast("Refreshed");
+    showToast(res.error ? "Couldn't refresh \u2014 see the warning below" : "Refreshed");
   };
 
 
@@ -1122,7 +1290,7 @@ function attachHandlers(){
     btn.onclick = function(){
       var id = btn.getAttribute("data-view-detail");
       var p = researcherData.filter(function(x){return x.id===id;})[0];
-      document.getElementById("detailPane").innerHTML = '<div style="background:var(--surface-2); padding:14px; border-radius:10px; border:1px solid var(--border); max-height:400px; overflow:auto;">' + formatDetail(p) + '</div>';
+      document.getElementById("detailPane").innerHTML = '<div style="background:var(--panel-2); padding:14px; border-radius:10px; border:1px solid var(--line); max-height:400px; overflow:auto;">' + formatDetail(p) + '</div>';
     };
   });
 
@@ -1136,7 +1304,7 @@ function attachHandlers(){
   var backToDash = document.getElementById("backToDash");
   if(backToDash) backToDash.onclick = function(){ activeMatchImage = null; screen = "dashboard"; render(); };
 
-  // Level 1: click an image, then click a description to pair them
+  // Level 1: click an image, then click a description to pair them (within the current set)
   app.querySelectorAll("[data-match-img]").forEach(function(card){
     card.onclick = function(){
       var imgId = card.getAttribute("data-match-img");
@@ -1148,29 +1316,46 @@ function attachHandlers(){
     row.onclick = function(){
       var descId = row.getAttribute("data-match-desc");
       if(!activeMatchImage){ showToast("Select an image first"); return; }
+      var si = Math.min(draftCache.level1.currentSet || 0, STUDY.level1.sets.length - 1);
+      var setId = STUDY.level1.sets[si].id;
+      var setAnswers = draftCache.level1.bySet[setId] || (draftCache.level1.bySet[setId] = {});
       // enforce one description per image, and one image per description
-      Object.keys(draftCache.level1).forEach(function(imgId){
-        if(draftCache.level1[imgId] === descId) delete draftCache.level1[imgId];
+      Object.keys(setAnswers).forEach(function(imgId){
+        if(setAnswers[imgId] === descId) delete setAnswers[imgId];
       });
-      draftCache.level1[activeMatchImage] = descId;
-      // auto-advance to the next unmatched image, if any
-      var conf = STUDY.level1;
-      var next = conf.images.filter(function(im){ return !draftCache.level1[im.id]; })[0];
+      setAnswers[activeMatchImage] = descId;
+      // auto-advance to the next unmatched image within this set, if any
+      var setConf = STUDY.level1.sets[si];
+      var next = setConf.images.filter(function(im){ return !setAnswers[im.id]; })[0];
       activeMatchImage = next ? next.id : null;
       scheduleAutosave("level1");
       render();
       renderSubmitState("level1");
     };
   });
+  var continueMatchSet = document.getElementById("continueMatchSet");
+  if(continueMatchSet) continueMatchSet.onclick = function(){
+    draftCache.level1.currentSet = Math.min(draftCache.level1.currentSet + 1, STUDY.level1.sets.length - 1);
+    activeMatchImage = null;
+    scheduleAutosave("level1");
+    render();
+  };
+  var prevMatchSet = document.getElementById("prevMatchSet");
+  if(prevMatchSet) prevMatchSet.onclick = function(){
+    draftCache.level1.currentSet = Math.max(draftCache.level1.currentSet - 1, 0);
+    activeMatchImage = null;
+    scheduleAutosave("level1");
+    render();
+  };
 
   // Level 2
   app.querySelectorAll("[data-l2-choice]").forEach(function(btn){
     btn.onclick = function(){
       var imgId = btn.getAttribute("data-l2-choice");
       var value = btn.getAttribute("data-value");
-      var cur = draftCache.level2[imgId] || {verdict:"", reasoning:""};
+      var cur = draftCache.level2.answers[imgId] || {verdict:"", reasoning:""};
       cur.verdict = value;
-      draftCache.level2[imgId] = cur;
+      draftCache.level2.answers[imgId] = cur;
       scheduleAutosave("level2");
       render();
     };
@@ -1178,28 +1363,52 @@ function attachHandlers(){
   app.querySelectorAll("[data-l2-reason]").forEach(function(ta){
     ta.oninput = function(){
       var imgId = ta.getAttribute("data-l2-reason");
-      var cur = draftCache.level2[imgId] || {verdict:"", reasoning:""};
+      var cur = draftCache.level2.answers[imgId] || {verdict:"", reasoning:""};
       cur.reasoning = ta.value;
-      draftCache.level2[imgId] = cur;
+      draftCache.level2.answers[imgId] = cur;
       scheduleAutosave("level2");
       renderSubmitState("level2");
+      renderNextButtonState("level2");
     };
   });
+  var nextL2 = document.getElementById("nextL2");
+  if(nextL2) nextL2.onclick = function(){
+    draftCache.level2.currentIndex = Math.min(draftCache.level2.currentIndex + 1, STUDY.level2.images.length - 1);
+    scheduleAutosave("level2");
+    render();
+  };
+  var prevL2 = document.getElementById("prevL2");
+  if(prevL2) prevL2.onclick = function(){
+    draftCache.level2.currentIndex = Math.max(draftCache.level2.currentIndex - 1, 0);
+    render();
+  };
 
   // Level 3
   app.querySelectorAll("[data-l3-opt]").forEach(function(cb){
     cb.onchange = function(){
       var parts = cb.getAttribute("data-l3-opt").split("::");
       var imgId = parts[0], optId = parts[1];
-      var cur = draftCache.level3[imgId] || {selected:[]};
+      var cur = draftCache.level3.answers[imgId] || {selected:[]};
       var idx = cur.selected.indexOf(optId);
       if(cb.checked && idx===-1) cur.selected.push(optId);
       if(!cb.checked && idx>-1) cur.selected.splice(idx,1);
-      draftCache.level3[imgId] = cur;
+      draftCache.level3.answers[imgId] = cur;
       scheduleAutosave("level3");
       renderSubmitState("level3");
+      renderNextButtonState("level3");
     };
   });
+  var nextL3 = document.getElementById("nextL3");
+  if(nextL3) nextL3.onclick = function(){
+    draftCache.level3.currentIndex = Math.min(draftCache.level3.currentIndex + 1, STUDY.level3.images.length - 1);
+    scheduleAutosave("level3");
+    render();
+  };
+  var prevL3 = document.getElementById("prevL3");
+  if(prevL3) prevL3.onclick = function(){
+    draftCache.level3.currentIndex = Math.max(draftCache.level3.currentIndex - 1, 0);
+    render();
+  };
 
   var submitLevelBtn = document.getElementById("submitLevelBtn");
   if(submitLevelBtn) submitLevelBtn.onclick = async function(){
@@ -1208,7 +1417,7 @@ function attachHandlers(){
     var payload = {};
     payload[key] = { completed:true, submittedAt: Date.now(), draft: draftCache[key] };
     await persistUpdate(participant.id, payload);
-    showToast("Submitted!");
+    if(backendOk) showToast("Submitted!"); // if it failed, persistUpdate already showed its own warning toast
     if(allDone(participant)){ screen = "complete"; }
     else { screen = "dashboard"; }
     render();
@@ -1220,8 +1429,8 @@ function attachHandlers(){
       inp.oninput = function(){
         var key = inp.getAttribute("data-edit");
         var m;
-        if(m = key.match(/^l1img-id-(\d+)$/)) contentDraft.level1.images[+m[1]].id = inp.value;
-        else if(m = key.match(/^l1desc-(\d+)$/)) contentDraft.level1.descriptions[+m[1]].text = inp.value;
+        if(m = key.match(/^l1img-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].images[+m[2]].id = inp.value;
+        else if(m = key.match(/^l1desc-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].descriptions[+m[2]].text = inp.value;
         else if(m = key.match(/^l2img-id-(\d+)$/)) contentDraft.level2.images[+m[1]].id = inp.value;
         else if(m = key.match(/^l3img-id-(\d+)$/)) contentDraft.level3.images[+m[1]].id = inp.value;
         else if(m = key.match(/^l3opt-(\d+)-(\d+)$/)) contentDraft.level3.images[+m[1]].options[+m[2]].text = inp.value;
@@ -1237,7 +1446,7 @@ function attachHandlers(){
         showToast("Processing image\u2026");
         try{
           var url = await fileToResizedDataUrl(file);
-          if(m = key.match(/^l1img-(\d+)$/)) contentDraft.level1.images[+m[1]].img = url;
+          if(m = key.match(/^l1img-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].images[+m[2]].img = url;
           else if(m = key.match(/^l2img-(\d+)$/)) contentDraft.level2.images[+m[1]].img = url;
           else if(m = key.match(/^l3img-(\d+)$/)) contentDraft.level3.images[+m[1]].img = url;
           showToast("Image ready \u2014 click Save Changes to publish");
@@ -1250,8 +1459,9 @@ function attachHandlers(){
       btn.onclick = function(){
         var key = btn.getAttribute("data-remove");
         var m;
-        if(m = key.match(/^l1img-(\d+)$/)) contentDraft.level1.images.splice(+m[1],1);
-        else if(m = key.match(/^l1desc-(\d+)$/)) contentDraft.level1.descriptions.splice(+m[1],1);
+        if(m = key.match(/^l1img-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].images.splice(+m[2],1);
+        else if(m = key.match(/^l1desc-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].descriptions.splice(+m[2],1);
+        else if(m = key.match(/^l1set-(\d+)$/)) contentDraft.level1.sets.splice(+m[1],1);
         else if(m = key.match(/^l2img-(\d+)$/)) contentDraft.level2.images.splice(+m[1],1);
         else if(m = key.match(/^l3img-(\d+)$/)) contentDraft.level3.images.splice(+m[1],1);
         else if(m = key.match(/^l3opt-(\d+)-(\d+)$/)) contentDraft.level3.images[+m[1]].options.splice(+m[2],1);
@@ -1266,19 +1476,22 @@ function attachHandlers(){
         if(m = key.match(/^l3opt-(\d+)$/)){
           var n = contentDraft.level3.images[+m[1]].options.length + 1;
           contentDraft.level3.images[+m[1]].options.push({id:"o"+Date.now(), text:"New option " + n});
+        } else if(m = key.match(/^l1img-(\d+)$/)){
+          contentDraft.level1.sets[+m[1]].images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','square','New Image')});
+        } else if(m = key.match(/^l1desc-(\d+)$/)){
+          contentDraft.level1.sets[+m[1]].descriptions.push({id:"d"+Date.now(), text:"New description"});
         }
         render();
       };
     });
 
-    var addL1Img = document.getElementById("addL1Img");
-    if(addL1Img) addL1Img.onclick = function(){
-      contentDraft.level1.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','square','New Image')});
-      render();
-    };
-    var addL1Desc = document.getElementById("addL1Desc");
-    if(addL1Desc) addL1Desc.onclick = function(){
-      contentDraft.level1.descriptions.push({id:"d"+Date.now(), text:"New description"});
+    var addL1Set = document.getElementById("addL1Set");
+    if(addL1Set) addL1Set.onclick = function(){
+      var sizeInput = document.getElementById("newSetSize");
+      var n = sizeInput ? parseInt(sizeInput.value, 10) : 3;
+      if(!n || n < 1) n = 3;
+      if(n > 10) n = 10; // keep individual Firestore docs small and the UI usable
+      contentDraft.level1.sets.push(buildDefaultMatchSet(Date.now(), n));
       render();
     };
     var addL2Img = document.getElementById("addL2Img");
@@ -1316,6 +1529,15 @@ function renderSubmitState(key){
   if(btn && btn.getAttribute("data-level")===key){
     btn.disabled = !levelIsComplete(key);
   }
+}
+function renderNextButtonState(key){
+  var id = key === "level2" ? "nextL2" : "nextL3";
+  var btn = document.getElementById(id);
+  if(!btn) return;
+  var conf = STUDY[key];
+  var idx = draftCache[key].currentIndex;
+  var im = conf.images[idx];
+  btn.disabled = !itemIsAnswered(key, im.id);
 }
 
 init();
