@@ -350,6 +350,7 @@ const firebaseConfig = {
   measurementId: "G-VQJXLC4NKS"
 };
 
+
 // The shared participant login (its PASSWORD is the passcode participants type in).
 var SHARED_LOGIN_EMAIL = "participant@deepfake.study.org";
 // Your own private researcher login (a real account only you know the password to).
@@ -665,7 +666,8 @@ function renderLanding(){
     '<input type="text" id="resumeInput" placeholder="e.g. P-7K2QXM" style="text-transform:uppercase;" />' +
     (lastError ? '<div class="warn-banner">' + escapeHtml(lastError) + '</div>' : '') +
     '<button class="btn-secondary" id="resumeBtn" style="width:100%;">Resume</button>' +
-  '</div>';
+  '</div>' +
+  '<div style="text-align:center; margin-top:4px;"><button class="link-small" id="goToResearcherLogin">Researcher sign-in</button></div>';
 }
 
 function levelStatus(p, key){
@@ -1074,6 +1076,14 @@ function attachHandlers(){
 
   var reviewAnswersBtn = document.getElementById("reviewAnswersBtn");
   if(reviewAnswersBtn) reviewAnswersBtn.onclick = function(){ screen = "dashboard"; render(); };
+
+  var goToResearcherLogin = document.getElementById("goToResearcherLogin");
+  if(goToResearcherLogin) goToResearcherLogin.onclick = async function(){
+    authReady = false; participant = null; researcherData = []; contentDraft = null;
+    authError = ""; authMode = "researcher";
+    try{ await fbAuth.signOut(); }catch(e){}
+    screen = "auth"; render();
+  };
 
   var signOutBtn = document.getElementById("signOutBtn");
   if(signOutBtn) signOutBtn.onclick = async function(){
