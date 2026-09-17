@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v16-2026-09-16-typed-matching (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v17-2026-09-16-restore-click-matching (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -212,12 +212,15 @@
   .match-images{ display:flex; flex-direction:column; gap:8px; }
   .match-image-card{
     border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--paper);
-    padding:9px 10px;
+    padding:9px 10px; cursor:pointer; transition:border-color .15s ease, background .15s ease;
     display:flex; gap:10px; align-items:center;
   }
+  .match-image-card:hover{ border-color:var(--line-strong); }
+  .match-image-card.active{ border-color:var(--accent); background:var(--accent-soft); }
   .match-image-card img{ width:120px; height:120px; object-fit:cover; border-radius:6px; border:1px solid var(--line); flex-shrink:0; }
   .match-image-card .info{ flex:1; min-width:0; }
-  .match-image-card .assign-note{ font-size:12.5px; font-weight:600; color:var(--ink-soft); }
+  .match-image-card .assign-note{ font-size:11.5px; color:var(--ink-soft); margin-top:2px; line-height:1.3; }
+  .match-image-card .assign-note.matched{ color:var(--ink); }
   .match-num-wrap{ display:flex; flex-direction:column; align-items:center; flex-shrink:0; }
   .match-num-wrap label{ font-size:10.5px; margin:0 0 3px; color:var(--ink-soft); font-weight:600; }
   .match-num-input{
@@ -234,12 +237,14 @@
   .match-descs{ display:flex; flex-direction:column; gap:8px; }
   .match-desc-row{
     border:1.5px solid var(--line); border-radius:var(--radius-lg); background:var(--panel);
-    padding:9px 10px; display:flex; gap:10px; align-items:flex-start;
-    font-size:13px; line-height:1.35;
+    padding:9px 10px; cursor:pointer; display:flex; gap:10px; align-items:flex-start;
+    transition:border-color .15s ease, background .15s ease; font-size:13px; line-height:1.35;
   }
+  .match-desc-row:hover{ border-color:var(--line-strong); }
+  .match-desc-row.awaiting{ border-style:dashed; }
   .match-slot{
     width:24px; height:24px; border-radius:50%; flex-shrink:0; margin-top:1px;
-    border:1.5px solid var(--line-strong); background:var(--panel-2); display:flex; align-items:center; justify-content:center;
+    border:1.5px dashed var(--line-strong); display:flex; align-items:center; justify-content:center;
     font-family:var(--serif); font-weight:700; font-size:12.5px; color:var(--ink-soft);
   }
   .match-hint{
@@ -896,6 +901,10 @@ function subtaskBar(label, total, currentIndex){
   return '<div class="subtask-bar"><div class="subtask-label">' + label + '</div><div class="subtask-dots">' + dots + '</div></div>';
 }
 
+var MATCH_COLORS = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A','#7A5C3F'];
+function matchColor(i){ return MATCH_COLORS[i % MATCH_COLORS.length]; }
+var activeMatchImage = null; // id of the image currently selected for pairing
+
 function renderLevel1Body(){
   var conf = STUDY.level1;
   var sets = conf.sets;
@@ -906,26 +915,30 @@ function renderLevel1Body(){
   var set = sets[si];
   if(!draftCache.level1.bySet[set.id]) draftCache.level1.bySet[set.id] = {};
   var draft = draftCache.level1.bySet[set.id];
-  var descIndexById = {}; set.descriptions.forEach(function(d,i){ descIndexById[d.id] = i; });
 
+  var imgIndex = {}; set.images.forEach(function(im,i){ imgIndex[im.id]=i; });
+  var reverseMap = {}; // descId -> imgId
+  Object.keys(draft).forEach(function(imgId){ if(draft[imgId]) reverseMap[draft[imgId]] = imgId; });
   var matchedCount = set.images.filter(function(im){ return draft[im.id]; }).length;
   var setComplete = matchedCount === set.images.length;
 
   var leftCol = set.images.map(function(im, i){
-    var typedNum = draft[im.id] !== undefined && descIndexById[draft[im.id]] !== undefined ? (descIndexById[draft[im.id]] + 1) : "";
-    return '<div class="match-image-card">' +
+    var isActive = activeMatchImage === im.id;
+    var matchedDesc = draft[im.id] ? set.descriptions.filter(function(d){return d.id===draft[im.id];})[0] : null;
+    return '<div class="match-image-card' + (isActive?' active':'') + '" data-match-img="' + im.id + '">' +
       '<div class="zoom-wrap" style="width:120px; flex-shrink:0;"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div>' +
-      '<div class="info"><div class="assign-note">Image ' + (i+1) + '</div></div>' +
-      '<div class="match-num-wrap">' +
-        '<label style="margin:0 0 3px;">Matches #</label>' +
-        '<input type="text" inputmode="numeric" maxlength="2" class="match-num-input" data-match-num="' + im.id + '" value="' + typedNum + '" placeholder="?"/>' +
+      '<div class="info">' +
+        '<div class="assign-note' + (matchedDesc?' matched':'') + '">' + (matchedDesc ? 'Matched to: \u201c' + escapeHtml(truncate(matchedDesc.text, 40)) + '\u201d' : (isActive ? 'Select a description on the right' : 'Tap to match')) + '</div>' +
       '</div>' +
+      '<div class="match-badge" style="background:' + (matchedDesc ? matchColor(i) : (isActive ? '#8A8F98' : '#C6C0B2')) + ';">' + (i+1) + '</div>' +
     '</div>';
   }).join("");
 
-  var rightCol = set.descriptions.map(function(d, i){
-    return '<div class="match-desc-row">' +
-      '<div class="match-slot">' + (i+1) + '</div>' +
+  var rightCol = set.descriptions.map(function(d){
+    var pairedImgId = reverseMap[d.id];
+    var pairedIdx = pairedImgId ? imgIndex[pairedImgId] : -1;
+    return '<div class="match-desc-row' + (!pairedImgId ? ' awaiting' : '') + '" data-match-desc="' + d.id + '">' +
+      '<div class="match-slot"' + (pairedImgId ? ' style="border-style:solid; border-color:' + matchColor(pairedIdx) + '; background:' + matchColor(pairedIdx) + '; color:#fff;"' : '') + '>' + (pairedImgId ? (pairedIdx+1) : '') + '</div>' +
       '<div>' + escapeHtml(d.text) + '</div>' +
     '</div>';
   }).join("");
@@ -939,7 +952,7 @@ function renderLevel1Body(){
   return subtaskBar('Matching task ' + (si+1) + ' of ' + sets.length, sets.length, si) +
   '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
-    '<div class="match-hint">For each image, write the number of the description you think matches it.</div>' +
+    '<div class="match-hint">' + (matchedCount < set.images.length ? 'Click an image, then click the description you think matches it.' : (isLastSet ? 'All images matched \u2014 click any pair to change it.' : 'Task complete \u2014 continue when you\u2019re ready.')) + '</div>' +
     '<div class="match-grid">' +
       '<div><div class="match-col-label">Images</div><div class="match-images">' + leftCol + '</div></div>' +
       '<div><div class="match-col-label">Descriptions</div><div class="match-descs">' + rightCol + '</div></div>' +
@@ -1547,42 +1560,48 @@ function attachHandlers(){
   });
 
   app.querySelectorAll("[data-goto]").forEach(function(btn){
-    btn.onclick = function(){ screen = btn.getAttribute("data-goto"); pendingTransition = true; render(); };
+    btn.onclick = function(){ activeMatchImage = null; screen = btn.getAttribute("data-goto"); pendingTransition = true; render(); };
   });
 
   var finishBtn = document.getElementById("finishBtn");
   if(finishBtn) finishBtn.onclick = function(){ screen = "complete"; render(); };
 
   var backToDash = document.getElementById("backToDash");
-  if(backToDash) backToDash.onclick = function(){ screen = "dashboard"; render(); };
+  if(backToDash) backToDash.onclick = function(){ activeMatchImage = null; screen = "dashboard"; render(); };
 
   // Level 1: click an image, then click a description to pair them (within the current set)
-  app.querySelectorAll("[data-match-num]").forEach(function(inp){
-    inp.oninput = function(){
-      var imgId = inp.getAttribute("data-match-num");
+  app.querySelectorAll("[data-match-img]").forEach(function(card){
+    card.onclick = function(){
+      var imgId = card.getAttribute("data-match-img");
+      activeMatchImage = (activeMatchImage === imgId) ? null : imgId;
+      render();
+    };
+  });
+  app.querySelectorAll("[data-match-desc]").forEach(function(row){
+    row.onclick = function(){
+      var descId = row.getAttribute("data-match-desc");
+      if(!activeMatchImage){ showToast("Select an image first"); return; }
       var si = Math.min(draftCache.level1.currentSet || 0, STUDY.level1.sets.length - 1);
+      var setId = STUDY.level1.sets[si].id;
+      var setAnswers = draftCache.level1.bySet[setId] || (draftCache.level1.bySet[setId] = {});
+      // enforce one description per image, and one image per description
+      Object.keys(setAnswers).forEach(function(imgId){
+        if(setAnswers[imgId] === descId) delete setAnswers[imgId];
+      });
+      setAnswers[activeMatchImage] = descId;
+      // auto-advance to the next unmatched image within this set, if any
       var setConf = STUDY.level1.sets[si];
-      var setAnswers = draftCache.level1.bySet[setConf.id] || (draftCache.level1.bySet[setConf.id] = {});
-      var raw = inp.value.trim();
-      var n = parseInt(raw, 10);
-      if(raw === ""){
-        delete setAnswers[imgId];
-        inp.classList.remove("input-error");
-      } else if(n >= 1 && n <= setConf.descriptions.length){
-        setAnswers[imgId] = setConf.descriptions[n-1].id;
-        inp.classList.remove("input-error");
-      } else {
-        delete setAnswers[imgId];
-        inp.classList.add("input-error");
-      }
+      var next = setConf.images.filter(function(im){ return !setAnswers[im.id]; })[0];
+      activeMatchImage = next ? next.id : null;
       scheduleAutosave("level1");
+      render();
       renderSubmitState("level1");
-      renderContinueButtonState();
     };
   });
   var continueMatchSet = document.getElementById("continueMatchSet");
   if(continueMatchSet) continueMatchSet.onclick = function(){
     draftCache.level1.currentSet = Math.min(draftCache.level1.currentSet + 1, STUDY.level1.sets.length - 1);
+    activeMatchImage = null;
     scheduleAutosave("level1");
     pendingTransition = true;
     render();
@@ -1590,6 +1609,7 @@ function attachHandlers(){
   var prevMatchSet = document.getElementById("prevMatchSet");
   if(prevMatchSet) prevMatchSet.onclick = function(){
     draftCache.level1.currentSet = Math.max(draftCache.level1.currentSet - 1, 0);
+    activeMatchImage = null;
     scheduleAutosave("level1");
     pendingTransition = true;
     render();
@@ -1836,15 +1856,7 @@ function renderNextButtonState(key){
   var im = conf.images[idx];
   btn.disabled = !itemIsAnswered(key, im.id);
 }
-function renderContinueButtonState(){
-  var btn = document.getElementById("continueMatchSet");
-  if(!btn) return;
-  var si = Math.min(draftCache.level1.currentSet || 0, STUDY.level1.sets.length - 1);
-  var setConf = STUDY.level1.sets[si];
-  var setAnswers = draftCache.level1.bySet[setConf.id] || {};
-  var allMatched = setConf.images.every(function(im){ return !!setAnswers[im.id]; });
-  btn.disabled = !allMatched;
-}
+
 
 init();
 </script>
