@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v27-2026-09-16-progress-bar-for-large-counts (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v28-2026-09-16-wider-descriptions-column (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -70,7 +70,7 @@
     -webkit-font-smoothing:antialiased;
     overflow-x:auto;
   }
-  #app{ max-width:920px; margin:0 auto; padding:0 20px 70px; }
+  #app{ max-width:1040px; margin:0 auto; padding:0 20px 70px; }
 
   /* ---------- header ---------- */
   .topbar{
@@ -214,7 +214,7 @@
   }
 
   /* ---------- level 1: two-column matching ---------- */
-  .match-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start; }
+  .match-grid{ display:grid; grid-template-columns:minmax(260px, 320px) 1fr; gap:20px; align-items:start; }
   .match-col-label{ font-size:11px; font-weight:700; color:var(--ink-soft); margin-bottom:8px; text-transform:none; }
   .match-images{ display:flex; flex-direction:column; gap:8px; }
   .match-image-card{
