@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v24-2026-09-16-fix-level-label-position (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v27-2026-09-16-progress-bar-for-large-counts (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -264,11 +264,19 @@
 
   /* ---------- sequential task/item progress + transitions ---------- */
   .subtask-bar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; gap:12px; }
-  .subtask-label{ font-size:12px; font-weight:600; color:var(--ink-soft); white-space:nowrap; }
-  .subtask-dots{ display:flex; gap:6px; }
-  .subtask-dots .dot{ width:7px; height:7px; border-radius:50%; background:var(--line-strong); }
+  .subtask-label{ font-size:12px; font-weight:600; color:var(--ink-soft); white-space:nowrap; flex-shrink:0; }
+  .subtask-dots{ display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; min-width:0; max-width:60%; }
+  .subtask-dots .dot{ width:7px; height:7px; border-radius:50%; background:var(--line-strong); flex-shrink:0; }
   .subtask-dots .dot.done{ background:var(--accent); }
   .subtask-dots .dot.current{ background:var(--accent); transform:scale(1.35); }
+  .subtask-progress-track{
+    flex:1; max-width:220px; height:6px; background:var(--line);
+    border-radius:999px; overflow:hidden; min-width:60px;
+  }
+  .subtask-progress-fill{
+    height:100%; background:var(--accent); border-radius:999px;
+    transition:width .25s ease; min-width:6px;
+  }
   .task-transition{ opacity:0; transform:translateY(8px); transition:opacity .32s ease, transform .32s ease; }
   .task-transition.in{ opacity:1; transform:translateY(0); }
   .continue-bar{ display:flex; justify-content:flex-end; margin-top:4px; }
@@ -614,6 +622,24 @@ async function deleteParticipant(id){
   }
 }
 
+// Finds studyImages docs no longer referenced by any current item across all
+// three levels (e.g. from renamed/replaced/removed items) and deletes them.
+// Only ever compares against the currently SAVED study, never unsaved edits.
+async function findUnusedImageIds(){
+  var referenced = {};
+  allImagesFlat(STUDY).forEach(function(im){ if(im.id) referenced[im.id] = true; });
+  var qs = await fbDb.collection("studyImages").get();
+  var unused = [];
+  qs.forEach(function(d){ if(!referenced[d.id]) unused.push(d.id); });
+  return unused;
+}
+async function deleteImagesByIds(ids){
+  var results = await Promise.allSettled(ids.map(function(id){ return fbDb.collection("studyImages").doc(id).delete(); }));
+  var failed = [];
+  results.forEach(function(r, i){ if(r.status === "rejected") failed.push(ids[i]); });
+  return { deleted: ids.length - failed.length, failed: failed };
+}
+
 /* ---------- survey content: stored in Firestore, editable by the researcher ---------- */
 function allImagesFlat(study){
   var arr = [];
@@ -645,17 +671,37 @@ async function loadStudyConfig(){
 async function saveStudyConfig(newStudy){
   // Split each image out into its own studyImages/{id} document, and keep
   // the main content doc small (just structure + text, no image bytes).
+  var freshImages = allImagesFlat(newStudy);
+
+  // Guard against a blank or duplicate "Item ID" field (easy to accidentally
+  // clear while editing) \u2014 Firestore's .doc() throws on an empty path,
+  // so repair it here rather than letting the whole save crash.
+  var seenIds = {};
+  var repaired = [];
+  freshImages.forEach(function(im){
+    var original = im.id;
+    if(!im.id || !String(im.id).trim()){
+      im.id = "img" + Date.now() + Math.random().toString(36).slice(2,6);
+    }
+    while(seenIds[im.id]){
+      im.id = im.id + "-" + Math.random().toString(36).slice(2,4);
+    }
+    seenIds[im.id] = true;
+    if(im.id !== original) repaired.push({ from: original, to: im.id });
+  });
+
   var contentOnly = cloneStudy(newStudy);
   var writes = [];
-  var freshImages = allImagesFlat(newStudy);
   var strippedImages = allImagesFlat(contentOnly);
   strippedImages.forEach(function(im, i){
+    im.id = freshImages[i].id; // keep the (possibly just-repaired) id in sync across both clones
     writes.push(fbDb.collection("studyImages").doc(im.id).set({ dataUrl: freshImages[i].img, updatedAt: Date.now() }));
     im.img = ""; // stripped from the content doc itself
   });
   writes.push(fbDb.collection("studyConfig").doc("content").set({ study: contentOnly, updatedAt: Date.now() }));
   await Promise.all(writes);
   STUDY = newStudy;
+  return { repaired: repaired };
 }
 
 /** Resize + compress an uploaded image entirely in the browser (no backend
@@ -1064,11 +1110,19 @@ function renderLevel(key){
 function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
 function subtaskBar(label, total, currentIndex){
-  var dots = "";
-  for(var i=0;i<total;i++){
-    dots += '<div class="dot' + (i<currentIndex?' done':'') + (i===currentIndex?' current':'') + '"></div>';
+  var DOT_THRESHOLD = 15; // beyond this, individual dots get cramped/overflow-y \u2014 a bar reads better
+  var indicator;
+  if(total <= DOT_THRESHOLD){
+    var dots = "";
+    for(var i=0;i<total;i++){
+      dots += '<div class="dot' + (i<currentIndex?' done':'') + (i===currentIndex?' current':'') + '"></div>';
+    }
+    indicator = '<div class="subtask-dots">' + dots + '</div>';
+  } else {
+    var pct = total > 0 ? Math.round(((currentIndex+1) / total) * 100) : 0;
+    indicator = '<div class="subtask-progress-track"><div class="subtask-progress-fill" style="width:' + pct + '%;"></div></div>';
   }
-  return '<div class="subtask-bar"><div class="subtask-label">' + label + '</div><div class="subtask-dots">' + dots + '</div></div>';
+  return '<div class="subtask-bar"><div class="subtask-label">' + label + '</div>' + indicator + '</div>';
 }
 
 var MATCH_COLORS = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A','#7A5C3F'];
@@ -1305,6 +1359,11 @@ function renderContentEditor(){
   if(!contentDraft) contentDraft = cloneStudy(STUDY);
   if(!contentDraft.levelOrder) contentDraft.levelOrder = getLevelOrder(STUDY);
   var out = '<p class="sub">Edit images, descriptions and options below, then Save. Changes apply to every participant immediately \u2014 including anyone mid-survey, next time they load a page.</p>';
+
+  out += '<div class="row between" style="align-items:center; margin-bottom:14px; padding:10px 14px; background:var(--panel-2); border-radius:var(--radius);">' +
+    '<p class="sub" style="margin:0; max-width:60ch;">Housekeeping: old images left behind from earlier edits (renamed, replaced, or removed items) can be safely deleted \u2014 this only removes files no longer used by any current task, based on your last saved content.</p>' +
+    '<button class="btn-secondary" id="cleanupImagesBtn" style="white-space:nowrap;">Clean Up Unused Images</button>' +
+  '</div>';
 
   out += '<div class="set-block">' +
     '<label style="margin-bottom:8px;">Order participants see the three levels in</label>';
@@ -2111,6 +2170,31 @@ function attachHandlers(){
       };
     });
 
+    var cleanupImagesBtn = document.getElementById("cleanupImagesBtn");
+    if(cleanupImagesBtn) cleanupImagesBtn.onclick = async function(){
+      cleanupImagesBtn.disabled = true;
+      try{
+        var unused = await findUnusedImageIds();
+        if(unused.length === 0){
+          showToast("No unused images found \u2014 nothing to clean up");
+          cleanupImagesBtn.disabled = false;
+          return;
+        }
+        var sure = typeof confirm === "function"
+          ? confirm("Delete " + unused.length + " unused image(s) from storage? This can't be undone, but it won't affect any current task \u2014 they're not referenced by anything live.")
+          : true;
+        if(!sure){ cleanupImagesBtn.disabled = false; return; }
+        var result = await deleteImagesByIds(unused);
+        if(result.failed.length){
+          showToast("Deleted " + result.deleted + ", but " + result.failed.length + " failed \u2014 check console");
+          console.error("failed to delete image ids:", result.failed);
+        } else {
+          showToast("Deleted " + result.deleted + " unused image(s)");
+        }
+      }catch(e){ console.error(e); showToast("Cleanup failed \u2014 check console"); }
+      cleanupImagesBtn.disabled = false;
+    };
+
     var addL1Set = document.getElementById("addL1Set");
     if(addL1Set) addL1Set.onclick = function(){
       var sizeInput = document.getElementById("newSetSize");
@@ -2151,9 +2235,13 @@ function attachHandlers(){
     if(saveContentBtn) saveContentBtn.onclick = async function(){
       saveContentBtn.disabled = true;
       try{
-        await saveStudyConfig(contentDraft);
+        var result = await saveStudyConfig(contentDraft);
         contentDraft = null;
-        showToast("Content saved \u2014 live for everyone now");
+        if(result && result.repaired && result.repaired.length){
+          showToast(result.repaired.length + " item ID(s) were blank/duplicate and got auto-fixed \u2014 saved");
+        } else {
+          showToast("Content saved \u2014 live for everyone now");
+        }
         render();
       }catch(e){ console.error(e); showToast("Save failed \u2014 check console"); saveContentBtn.disabled = false; }
     };
