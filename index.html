@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v20-2026-09-16-category-tagging-multifile-export (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v21-2026-09-16-numeric-response-format (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1431,7 +1431,12 @@ function buildResultsMatrix(list, categoryFilter){
       colSpecs.push(function(p){
         var answers = (p.level1.draft && p.level1.draft.bySet && p.level1.draft.bySet[set.id]) || {};
         var given = answers[im.id];
-        return { text: given ? labelForDesc(set, given) : "", correctness: isItemCorrect("l1", im, given) };
+        var text = "";
+        if(given){
+          var gi = set.descriptions.findIndex(function(d){ return d.id === given; });
+          text = gi > -1 ? String(gi + 1) : "";
+        }
+        return { text: text, correctness: isItemCorrect("l1", im, given) };
       });
     });
   });
