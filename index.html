@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v31-2026-09-16-add-reasoning-to-export (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v32-2026-09-16-editable-level-copy (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1384,6 +1384,16 @@ function renderResearcherPanel(){
   '</div>';
 }
 
+function levelCopyEditorHtml(key){
+  var lvl = contentDraft[key];
+  return '<div class="set-block">' +
+    '<label>Level title <span style="font-weight:400;">(shown to participants as "Level N \u2014 [this]")</span></label>' +
+    '<input type="text" data-level-title="' + key + '" value="' + escapeHtml(lvl.title) + '"/>' +
+    '<label style="margin-top:8px;">Instructions shown to participants</label>' +
+    '<textarea style="min-height:70px;" data-level-instructions="' + key + '">' + escapeHtml(lvl.instructions) + '</textarea>' +
+  '</div>';
+}
+
 function renderContentEditor(){
   if(!contentDraft) contentDraft = cloneStudy(STUDY);
   if(!contentDraft.levelOrder) contentDraft.levelOrder = getLevelOrder(STUDY);
@@ -1409,6 +1419,7 @@ function renderContentEditor(){
 
   // Level 1: one or more independent matching tasks, each with its own images + descriptions
   out += '<h2>Level 1 \u2014 Matching Tasks</h2><p class="sub">Participants complete each matching task in order \u2014 the next one only appears once the current one is finished.</p>';
+  out += levelCopyEditorHtml("level1");
   contentDraft.level1.sets.forEach(function(set, si){
     out += '<div class="set-block">' +
       '<div class="row between" style="margin-bottom:12px;"><h2 style="font-size:16px; margin:0;">Task ' + (si+1) + '</h2>' +
@@ -1466,7 +1477,9 @@ function renderContentEditor(){
   '<p class="sub" style="margin-top:6px;">Creates a new task with that many images and that many descriptions (e.g. 5 \u2192 a 5\u00d75 matching task). You can still add or remove individual images/descriptions afterward.</p>';
 
   // Level 2: images or text reports (real/fake)
-  out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2><div class="editor-grid">';
+  out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2>';
+  out += levelCopyEditorHtml("level2");
+  out += '<div class="editor-grid">';
   contentDraft.level2.images.forEach(function(im, i){
     if(!im.type) im.type = "image";
     var isText = im.type === "text";
@@ -1502,7 +1515,9 @@ function renderContentEditor(){
   out += '<button class="btn-secondary" id="addL2Img">+ Add item (image or text)</button>';
 
   // Level 3: images each with own options
-  out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2><div class="editor-grid">';
+  out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2>';
+  out += levelCopyEditorHtml("level3");
+  out += '<div class="editor-grid">';
   contentDraft.level3.images.forEach(function(im, i){
     if(!im.correctOptions) im.correctOptions = [];
     out += '<div class="task-block">' +
@@ -2068,6 +2083,17 @@ function attachHandlers(){
 
   /* ---------- content editor handlers ---------- */
   if(researcherTab === "content" && contentDraft){
+    app.querySelectorAll("[data-level-title]").forEach(function(inp){
+      inp.oninput = function(){
+        contentDraft[inp.getAttribute("data-level-title")].title = inp.value;
+      };
+    });
+    app.querySelectorAll("[data-level-instructions]").forEach(function(ta){
+      ta.oninput = function(){
+        contentDraft[ta.getAttribute("data-level-instructions")].instructions = ta.value;
+      };
+    });
+
     app.querySelectorAll("[data-category]").forEach(function(sel){
       var key = sel.getAttribute("data-category");
       var m;
