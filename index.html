@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v30-2026-09-16-fix-submit-button-label (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v31-2026-09-16-add-reasoning-to-export (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1707,6 +1707,12 @@ function buildResultsMatrix(list, categoryFilter){
       var answers = (p.level2.draft && p.level2.draft.answers) || {};
       var a = answers[im.id];
       return { text: a && a.verdict ? a.verdict : "", correctness: isItemCorrect("l2", im, a ? a.verdict : null) };
+    });
+    headers.push("Image " + (i+1) + " Reasoning");
+    colSpecs.push(function(p){
+      var answers = (p.level2.draft && p.level2.draft.answers) || {};
+      var a = answers[im.id];
+      return { text: a && a.reasoning ? a.reasoning : "" };
     });
   });
   headers.push("Level 2 Score");
