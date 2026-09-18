@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v17-2026-09-16-restore-click-matching (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v18-2026-09-16-text-reports-delete (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -185,6 +185,13 @@
     width:100%; border-radius:var(--radius);
     display:block; border:1px solid var(--line);
   }
+  .task-block.stacked{ flex-direction:column; }
+  .task-block.stacked .tb-body{ width:100%; min-width:0; }
+  .report-text{
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 16px; font-size:14px; line-height:1.55; white-space:pre-wrap;
+    max-height:360px; overflow-y:auto; font-family:var(--sans);
+  }
   .choice-row{ display:flex; gap:8px; margin-bottom:8px; }
   .choice-btn{
     flex:1; padding:9px; border-radius:var(--radius); border:1.5px solid var(--line-strong);
@@ -308,6 +315,7 @@
   }
   .editor-grid .task-block .tb-media{ width:100%; }
   .editor-grid .task-block img{ max-height:180px; width:100%; object-fit:cover; }
+  .editor-grid .task-block.full-width{ grid-column:1 / -1; }
   .editor-thumb{ width:100%; max-height:180px; object-fit:cover; border-radius:var(--radius); margin-bottom:8px; }
 
   .footer-nav{ display:flex; justify-content:space-between; align-items:center; margin-top:6px; }
@@ -380,11 +388,11 @@ var DEFAULT_STUDY = {
   },
   level2: {
     title: "Level 2 \u2014 Real or Fake?",
-    instructions: "For each image, decide whether you believe it is real or AI-generated/fake, then briefly explain your reasoning.",
+    instructions: "For each item, decide whether you believe it is real or AI-generated/fake, then briefly explain your reasoning.",
     images: [
-      { id: "r1", img: placeholderImg('#0369a1','blob','Sample 1'), correctVerdict: null },
-      { id: "r2", img: placeholderImg('#be185d','blob','Sample 2'), correctVerdict: null },
-      { id: "r3", img: placeholderImg('#7c3aed','blob','Sample 3'), correctVerdict: null }
+      { id: "r1", type: "image", img: placeholderImg('#0369a1','blob','Sample 1'), reportText: "", correctVerdict: null },
+      { id: "r2", type: "image", img: placeholderImg('#be185d','blob','Sample 2'), reportText: "", correctVerdict: null },
+      { id: "r3", type: "image", img: placeholderImg('#7c3aed','blob','Sample 3'), reportText: "", correctVerdict: null }
     ]
   },
   level3: {
@@ -551,12 +559,22 @@ async function fetchAllParticipants(){
     return { data: [], error: (e && e.code) || (e && e.message) || "unknown error" };
   }
 }
+async function deleteParticipant(id){
+  try{
+    await fbDb.collection("participants").doc(id).delete();
+    if(participant && participant.id === id){ participant = null; } // safety: don't leave a deleted record referenced locally
+    return { ok: true };
+  }catch(e){
+    console.error("delete participant failed", e);
+    return { ok: false, error: (e && e.code) || (e && e.message) || "unknown error" };
+  }
+}
 
 /* ---------- survey content: stored in Firestore, editable by the researcher ---------- */
 function allImagesFlat(study){
   var arr = [];
   study.level1.sets.forEach(function(set){ set.images.forEach(function(im){ arr.push(im); }); });
-  study.level2.images.forEach(function(im){ arr.push(im); });
+  study.level2.images.forEach(function(im){ if(im.type !== "text") arr.push(im); });
   study.level3.images.forEach(function(im){ arr.push(im); });
   return arr;
 }
@@ -969,19 +987,24 @@ function renderLevel2Body(){
   }
   var idx = Math.min(draftCache.level2.currentIndex || 0, conf.images.length - 1);
   var im = conf.images[idx];
+  var isText = im.type === "text";
   var cur = draftCache.level2.answers[im.id] || {verdict:"", reasoning:""};
   var answered = itemIsAnswered("level2", im.id);
   var isLast = idx === conf.images.length - 1;
-  var backLink = idx > 0 ? '<button class="link-small" id="prevL2" style="margin-bottom:14px;">&larr; Previous image</button>' : "";
-  var nextBtn = !isLast ? '<div class="continue-bar"><button class="btn-primary" id="nextL2" ' + (answered?'':'disabled') + '>Next image \u2192</button></div>' : "";
+  var backLink = idx > 0 ? '<button class="link-small" id="prevL2" style="margin-bottom:14px;">&larr; Previous item</button>' : "";
+  var nextBtn = !isLast ? '<div class="continue-bar"><button class="btn-primary" id="nextL2" ' + (answered?'':'disabled') + '>Next item \u2192</button></div>' : "";
 
-  return subtaskBar('Image ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
+  var mediaHtml = isText
+    ? '<div class="report-text">' + escapeHtml(im.reportText || "") + '</div>'
+    : '<div class="tb-media"><div class="zoom-wrap"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div></div>';
+
+  return subtaskBar('Item ' + (idx+1) + ' of ' + conf.images.length, conf.images.length, idx) +
   '<div class="task-transition' + (pendingTransition ? '' : ' in') + '" id="taskAnim">' +
     backLink +
-    '<div class="task-block">' +
-      '<div class="tb-media"><div class="zoom-wrap"><img src="' + im.img + '" alt="stimulus image" class="zoomable" data-zoom-src="' + im.img + '" /><span class="zoom-hint">\u2921</span></div></div>' +
+    '<div class="task-block' + (isText?' stacked':'') + '">' +
+      mediaHtml +
       '<div class="tb-body">' +
-        '<label>Is this image real or fake?</label>' +
+        '<label>Is this ' + (isText ? 'report' : 'image') + ' real or fake?</label>' +
         '<div class="choice-row">' +
           '<button type="button" class="choice-btn ' + (cur.verdict==='real'?'selected-real':'') + '" data-l2-choice="' + im.id + '" data-value="real">Real</button>' +
           '<button type="button" class="choice-btn ' + (cur.verdict==='fake'?'selected-fake':'') + '" data-l2-choice="' + im.id + '" data-value="fake">Fake</button>' +
@@ -1101,7 +1124,7 @@ function renderResearcherPanel(){
       '<td><span class="badge ' + scoreBadgeClass(s2) + '">' + formatScore(s2) + '</span></td>' +
       '<td><span class="badge ' + scoreBadgeClass(s3) + '">' + formatScore(s3) + '</span></td>' +
       '<td><span class="badge ' + scoreBadgeClass(sTotal) + '">' + formatScore(sTotal) + '</span></td>' +
-      '<td><button class="btn-secondary" style="padding:6px 10px; font-size:12px;" data-view-detail="' + p.id + '">View</button></td>' +
+      '<td><div class="row" style="flex-wrap:nowrap; gap:6px;"><button class="btn-secondary" style="padding:6px 10px; font-size:12px;" data-view-detail="' + p.id + '">View</button><button class="btn-secondary" style="padding:6px 10px; font-size:12px; color:var(--danger); border-color:var(--danger);" data-delete-participant="' + p.id + '">Delete</button></div></td>' +
     '</tr>';
   }).join("");
 
@@ -1183,24 +1206,36 @@ function renderContentEditor(){
   '</div>' +
   '<p class="sub" style="margin-top:6px;">Creates a new task with that many images and that many descriptions (e.g. 5 \u2192 a 5\u00d75 matching task). You can still add or remove individual images/descriptions afterward.</p>';
 
-  // Level 2: images (real/fake)
+  // Level 2: images or text reports (real/fake)
   out += '<hr class="sep"/><h2>Level 2 \u2014 Real or Fake</h2><div class="editor-grid">';
   contentDraft.level2.images.forEach(function(im, i){
-    out += '<div class="task-block">' +
-      '<img src="' + im.img + '" class="editor-thumb"/>' +
-      '<label>Image ID</label><input type="text" data-edit="l2img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
-      '<label>Replace image</label><input type="file" accept="image/*" data-upload="l2img-' + i + '"/>' +
+    if(!im.type) im.type = "image";
+    var isText = im.type === "text";
+    out += '<div class="task-block' + (isText ? ' full-width' : '') + '">' +
+      '<label>Item type</label>' +
+      '<select data-l2type="' + i + '">' +
+        '<option value="image" ' + (!isText?'selected':'') + '>Image</option>' +
+        '<option value="text" ' + (isText?'selected':'') + '>Text report</option>' +
+      '</select>';
+    if(isText){
+      out += '<label style="margin-top:6px;">Report text</label>' +
+        '<textarea style="min-height:140px;" data-l2text="' + i + '" placeholder="Paste or write the report text here\u2026">' + escapeHtml(im.reportText||"") + '</textarea>';
+    } else {
+      out += '<img src="' + im.img + '" class="editor-thumb"/>' +
+        '<label>Replace image</label><input type="file" accept="image/*" data-upload="l2img-' + i + '"/>';
+    }
+    out += '<label style="margin-top:6px;">Item ID</label><input type="text" data-edit="l2img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label style="margin-top:6px;">Correct answer (for scoring)</label>' +
       '<select data-answer-key="l2-' + i + '">' +
         '<option value="" ' + (!im.correctVerdict?'selected':'') + '>Not set</option>' +
         '<option value="real" ' + (im.correctVerdict==='real'?'selected':'') + '>Real</option>' +
         '<option value="fake" ' + (im.correctVerdict==='fake'?'selected':'') + '>Fake</option>' +
       '</select>' +
-      '<button class="btn-secondary" style="margin-top:6px;" data-remove="l2img-' + i + '">Remove image</button>' +
+      '<button class="btn-secondary" style="margin-top:6px;" data-remove="l2img-' + i + '">Remove this item</button>' +
     '</div>';
   });
   out += '</div>';
-  out += '<button class="btn-secondary" id="addL2Img">+ Add image</button>';
+  out += '<button class="btn-secondary" id="addL2Img">+ Add item (image or text)</button>';
 
   // Level 3: images each with own options
   out += '<hr class="sep"/><h2>Level 3 \u2014 Select Option(s)</h2><div class="editor-grid">';
@@ -1559,6 +1594,27 @@ function attachHandlers(){
     };
   });
 
+  app.querySelectorAll("[data-delete-participant]").forEach(function(btn){
+    btn.onclick = async function(){
+      var id = btn.getAttribute("data-delete-participant");
+      var p = researcherData.filter(function(x){return x.id===id;})[0];
+      var label = p ? (p.name + " (" + p.id + ")") : id;
+      var sure = typeof confirm === "function" ? confirm("Delete " + label + "? This permanently removes their data and cannot be undone.") : true;
+      if(!sure) return;
+      btn.disabled = true;
+      var result = await deleteParticipant(id);
+      if(result.ok){
+        researcherData = researcherData.filter(function(x){return x.id!==id;});
+        document.getElementById("detailPane").innerHTML = "";
+        render();
+        showToast("Deleted " + label);
+      } else {
+        btn.disabled = false;
+        showToast("Couldn\u2019t delete \u2014 check the browser console");
+      }
+    };
+  });
+
   app.querySelectorAll("[data-goto]").forEach(function(btn){
     btn.onclick = function(){ activeMatchImage = null; screen = btn.getAttribute("data-goto"); pendingTransition = true; render(); };
   });
@@ -1813,9 +1869,25 @@ function attachHandlers(){
     };
     var addL2Img = document.getElementById("addL2Img");
     if(addL2Img) addL2Img.onclick = function(){
-      contentDraft.level2.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','blob','New Image')});
+      contentDraft.level2.images.push({id:"img"+Date.now(), type:"image", img: placeholderImg('#6b7280','blob','New Item'), reportText:"", correctVerdict:null});
       render();
     };
+    app.querySelectorAll("[data-l2type]").forEach(function(sel){
+      sel.onchange = function(){
+        var i = +sel.getAttribute("data-l2type");
+        var im = contentDraft.level2.images[i];
+        im.type = sel.value;
+        if(im.type === "image" && !im.img) im.img = placeholderImg('#6b7280','blob','New Item');
+        if(im.type === "text") im.img = ""; // avoid embedding stale image bytes into the content doc
+        render();
+      };
+    });
+    app.querySelectorAll("[data-l2text]").forEach(function(ta){
+      ta.oninput = function(){
+        var i = +ta.getAttribute("data-l2text");
+        contentDraft.level2.images[i].reportText = ta.value;
+      };
+    });
     var addL3Img = document.getElementById("addL3Img");
     if(addL3Img) addL3Img.onclick = function(){
       contentDraft.level3.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','triangle','New Image'), options:[{id:"o1",text:"Option 1"},{id:"o2",text:"Option 2"}]});
