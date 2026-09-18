@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v21-2026-09-16-numeric-response-format (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v23-2026-09-16-interactive-zoom (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -287,12 +287,14 @@
   .lightbox{
     display:none; position:fixed; inset:0; background:rgba(10,10,14,0.94);
     z-index:200; align-items:center; justify-content:center; padding:24px;
-    cursor:zoom-out;
+    cursor:zoom-out; overflow:hidden;
   }
   .lightbox.show{ display:flex; }
   .lightbox img{
-    max-width:92vw; max-height:82vh; border-radius:10px; cursor:default;
+    max-width:92vw; max-height:82vh; border-radius:10px; cursor:zoom-in;
     box-shadow:0 20px 60px rgba(0,0,0,0.5);
+    touch-action:none; user-select:none; -webkit-user-drag:none;
+    transform-origin:center center; will-change:transform;
   }
   .lightbox-back{
     position:absolute; top:20px; left:20px; background:rgba(255,255,255,0.12);
@@ -300,6 +302,18 @@
     font-weight:600; backdrop-filter:blur(4px);
   }
   .lightbox-back:hover{ background:rgba(255,255,255,0.22); }
+  .lightbox-controls{
+    position:absolute; bottom:26px; left:50%; transform:translateX(-50%);
+    display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.12);
+    padding:6px; border-radius:999px; backdrop-filter:blur(4px);
+  }
+  .lightbox-controls button{
+    width:36px; height:36px; padding:0; border-radius:50%;
+    background:rgba(255,255,255,0.15); color:#fff; border:1px solid rgba(255,255,255,0.3);
+    font-size:17px; font-weight:700; line-height:1;
+  }
+  .lightbox-controls button:hover{ background:rgba(255,255,255,0.28); }
+  .lightbox-controls #lightboxZoomReset{ width:auto; padding:0 12px; font-size:12px; border-radius:999px; }
 
   /* ---------- editor: task-set grouping + compact image grid ---------- */
   .set-block{
@@ -403,6 +417,7 @@ function buildDefaultMatchSet(setNum, n){
 }
 
 var DEFAULT_STUDY = {
+  levelOrder: ["level1", "level2", "level3"],
   level1: {
     title: "Level 1 \u2014 Match the Images",
     instructions: "Look at the images below and match each one to the description you think fits it best.",
@@ -429,6 +444,13 @@ var DEFAULT_STUDY = {
 };
 
 function cloneStudy(s){ return JSON.parse(JSON.stringify(s)); }
+var DEFAULT_LEVEL_ORDER = ["level1", "level2", "level3"];
+function getLevelOrder(study){
+  var order = study && study.levelOrder;
+  var valid = Array.isArray(order) && order.length === 3 &&
+    DEFAULT_LEVEL_ORDER.every(function(k){ return order.indexOf(k) > -1; });
+  return valid ? order : DEFAULT_LEVEL_ORDER.slice();
+}
 var STUDY = cloneStudy(DEFAULT_STUDY); // overwritten by loadStudyConfig() once Firestore responds
 
 /* =========================================================================
@@ -669,20 +691,124 @@ function showToast(msg){
   showToast._t = setTimeout(function(){ t.classList.remove("show"); }, 1600);
 }
 
-/* ---------- full-screen image zoom ---------- */
+/* ---------- full-screen image zoom (with real interactive zoom/pan) ---------- */
+var zoomState = null;
+function resetZoomState(){
+  zoomState = { scale: 1, x: 0, y: 0, pointers: {}, lastDist: null, panStart: null };
+}
+function clampScale(s){ return Math.min(6, Math.max(1, s)); }
+function applyZoomTransform(){
+  var lb = document.getElementById("lightbox");
+  var img = lb ? lb.querySelector("img") : null;
+  if(!img || !zoomState) return;
+  img.style.transform = "translate(" + zoomState.x + "px, " + zoomState.y + "px) scale(" + zoomState.scale + ")";
+  img.style.cursor = zoomState.scale > 1.01 ? "grab" : "zoom-in";
+}
+
 function openLightbox(src){
   var lb = document.getElementById("lightbox");
-  lb.innerHTML = '<button class="lightbox-back" id="lightboxBack">\u2190 Back</button><img src="' + src + '" alt="enlarged image"/>';
+  lb.innerHTML =
+    '<button class="lightbox-back" id="lightboxBack">\u2190 Back</button>' +
+    '<div class="lightbox-controls">' +
+      '<button id="lightboxZoomOut" title="Zoom out">\u2212</button>' +
+      '<button id="lightboxZoomReset" title="Reset zoom">1:1</button>' +
+      '<button id="lightboxZoomIn" title="Zoom in">+</button>' +
+    '</div>' +
+    '<img src="' + src + '" alt="enlarged image" draggable="false"/>';
   lb.classList.add("show");
-  document.getElementById("lightboxBack").onclick = function(e){ e.stopPropagation(); closeLightbox(); };
-  lb.onclick = closeLightbox; // clicking the dark backdrop also closes it
+  resetZoomState();
+  applyZoomTransform();
+
   var img = lb.querySelector("img");
-  if(img) img.onclick = function(e){ e.stopPropagation(); }; // clicking the image itself shouldn't close it
+
+  document.getElementById("lightboxBack").onclick = function(e){ e.stopPropagation(); closeLightbox(); };
+  document.getElementById("lightboxZoomIn").onclick = function(e){
+    e.stopPropagation();
+    zoomState.scale = clampScale(zoomState.scale * 1.4);
+    applyZoomTransform();
+  };
+  document.getElementById("lightboxZoomOut").onclick = function(e){
+    e.stopPropagation();
+    zoomState.scale = clampScale(zoomState.scale / 1.4);
+    if(zoomState.scale <= 1.01){ zoomState.scale = 1; zoomState.x = 0; zoomState.y = 0; }
+    applyZoomTransform();
+  };
+  document.getElementById("lightboxZoomReset").onclick = function(e){
+    e.stopPropagation();
+    resetZoomState();
+    applyZoomTransform();
+  };
+
+  img.onclick = function(e){ e.stopPropagation(); }; // clicking the image itself shouldn't close it
+  img.ondblclick = function(e){
+    e.stopPropagation();
+    if(zoomState.scale > 1.01){ resetZoomState(); }
+    else { zoomState.scale = 2.5; }
+    applyZoomTransform();
+  };
+
+  // mouse wheel / trackpad: zoom in and out
+  lb.onwheel = function(e){
+    e.preventDefault();
+    var factor = e.deltaY < 0 ? 1.15 : (1/1.15);
+    zoomState.scale = clampScale(zoomState.scale * factor);
+    if(zoomState.scale <= 1.01){ zoomState.scale = 1; zoomState.x = 0; zoomState.y = 0; }
+    applyZoomTransform();
+  };
+
+  // touch/pen/mouse via pointer events: drag to pan once zoomed, pinch with two fingers to zoom
+  img.onpointerdown = function(e){
+    zoomState.pointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+    var ids = Object.keys(zoomState.pointers);
+    if(ids.length === 1 && zoomState.scale > 1.01){
+      zoomState.panStart = {x: e.clientX - zoomState.x, y: e.clientY - zoomState.y};
+      img.style.cursor = "grabbing";
+    }
+    if(ids.length === 2){
+      var pts = ids.map(function(id){ return zoomState.pointers[id]; });
+      zoomState.lastDist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+    }
+    try{ img.setPointerCapture(e.pointerId); }catch(err){}
+  };
+  img.onpointermove = function(e){
+    if(!zoomState.pointers[e.pointerId]) return;
+    zoomState.pointers[e.pointerId] = {x: e.clientX, y: e.clientY};
+    var ids = Object.keys(zoomState.pointers);
+    if(ids.length === 2){
+      var pts = ids.map(function(id){ return zoomState.pointers[id]; });
+      var dist = Math.hypot(pts[0].x-pts[1].x, pts[0].y-pts[1].y);
+      if(zoomState.lastDist){
+        zoomState.scale = clampScale(zoomState.scale * (dist / zoomState.lastDist));
+      }
+      zoomState.lastDist = dist;
+      applyZoomTransform();
+    } else if(ids.length === 1 && zoomState.panStart && zoomState.scale > 1.01){
+      zoomState.x = e.clientX - zoomState.panStart.x;
+      zoomState.y = e.clientY - zoomState.panStart.y;
+      applyZoomTransform();
+    }
+  };
+  function endPointer(e){
+    delete zoomState.pointers[e.pointerId];
+    var remaining = Object.keys(zoomState.pointers);
+    if(remaining.length < 2) zoomState.lastDist = null;
+    if(remaining.length === 0){ zoomState.panStart = null; applyZoomTransform(); }
+  }
+  img.onpointerup = endPointer;
+  img.onpointercancel = endPointer;
+  img.onpointerleave = endPointer;
+
+  // clicking the dark backdrop closes it, but only when not currently zoomed in
+  // (otherwise panning near the edge of the image would accidentally close it)
+  lb.onclick = function(){ if(!zoomState || zoomState.scale <= 1.01) closeLightbox(); };
 }
 function closeLightbox(){
   var lb = document.getElementById("lightbox");
   lb.classList.remove("show");
   lb.innerHTML = "";
+  lb.onwheel = null;
+  lb.onclick = null;
+  zoomState = null;
 }
 // Re-attached after every render(): any stimulus image opens the full-screen
 // view instead of (or in addition to) whatever the surrounding card does.
@@ -867,11 +993,14 @@ function statusLabel(s){ return s==="done"?"Completed":s==="progress"?"In progre
 
 function renderDashboard(){
   var p = participant;
-  var levels = [
-    {key:'level1', title: STUDY.level1.title, desc: 'Match images to descriptions'},
-    {key:'level2', title: STUDY.level2.title, desc: 'Judge real vs. fake with reasoning'},
-    {key:'level3', title: STUDY.level3.title, desc: 'Select relevant option(s) per image'}
-  ];
+  var descByKey = {
+    level1: 'Match images to descriptions',
+    level2: 'Judge real vs. fake with reasoning',
+    level3: 'Select relevant option(s) per image'
+  };
+  var levels = getLevelOrder(STUDY).map(function(key){
+    return { key: key, title: STUDY[key].title, desc: descByKey[key] };
+  });
   var items = levels.map(function(l, i){
     var st = levelStatus(p, l.key);
     return '<div class="level-item">' +
@@ -1161,14 +1290,33 @@ function renderResearcherPanel(){
 
 function renderContentEditor(){
   if(!contentDraft) contentDraft = cloneStudy(STUDY);
+  if(!contentDraft.levelOrder) contentDraft.levelOrder = getLevelOrder(STUDY);
   var out = '<p class="sub">Edit images, descriptions and options below, then Save. Changes apply to every participant immediately \u2014 including anyone mid-survey, next time they load a page.</p>';
+
+  var levelNames = { level1: "Level 1 \u2014 Matching", level2: "Level 2 \u2014 Real or Fake", level3: "Level 3 \u2014 Select Option(s)" };
+  out += '<div class="set-block">' +
+    '<label style="margin-bottom:8px;">Order participants see the three levels in</label>';
+  contentDraft.levelOrder.forEach(function(key, i){
+    out += '<div class="row between" style="padding:8px 0; ' + (i>0?'border-top:1px solid var(--line);':'') + '">' +
+      '<div style="font-size:14px; font-weight:600;">' + (i+1) + '. ' + levelNames[key] + '</div>' +
+      '<div class="row" style="gap:4px;">' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-up="levelorder-' + i + '" ' + (i===0?'disabled':'') + '>\u2191</button>' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-down="levelorder-' + i + '" ' + (i===contentDraft.levelOrder.length-1?'disabled':'') + '>\u2193</button>' +
+      '</div>' +
+    '</div>';
+  });
+  out += '</div>';
 
   // Level 1: one or more independent matching tasks, each with its own images + descriptions
   out += '<h2>Level 1 \u2014 Matching Tasks</h2><p class="sub">Participants complete each matching task in order \u2014 the next one only appears once the current one is finished.</p>';
   contentDraft.level1.sets.forEach(function(set, si){
     out += '<div class="set-block">' +
       '<div class="row between" style="margin-bottom:12px;"><h2 style="font-size:16px; margin:0;">Task ' + (si+1) + '</h2>' +
-        '<button class="btn-secondary" data-remove="l1set-' + si + '">Remove this task</button></div>' +
+        '<div class="row" style="gap:4px;">' +
+          '<button class="btn-secondary" style="padding:5px 10px;" data-move-up="l1set-' + si + '" ' + (si===0?'disabled':'') + '>\u2191</button>' +
+          '<button class="btn-secondary" style="padding:5px 10px;" data-move-down="l1set-' + si + '" ' + (si===contentDraft.level1.sets.length-1?'disabled':'') + '>\u2193</button>' +
+          '<button class="btn-secondary" data-remove="l1set-' + si + '">Remove this task</button>' +
+        '</div></div>' +
       '<p class="sub" style="margin-bottom:10px;">Images</p><div class="editor-grid">';
     set.images.forEach(function(im, i){
       out += '<div class="task-block">' +
@@ -1243,7 +1391,11 @@ function renderContentEditor(){
         '<option value="real" ' + (im.correctVerdict==='real'?'selected':'') + '>Real</option>' +
         '<option value="fake" ' + (im.correctVerdict==='fake'?'selected':'') + '>Fake</option>' +
       '</select>' +
-      '<button class="btn-secondary" style="margin-top:6px;" data-remove="l2img-' + i + '">Remove this item</button>' +
+      '<div class="row" style="gap:4px; margin-top:6px;">' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-up="l2img-' + i + '" ' + (i===0?'disabled':'') + '>\u2191</button>' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-down="l2img-' + i + '" ' + (i===contentDraft.level2.images.length-1?'disabled':'') + '>\u2193</button>' +
+        '<button class="btn-secondary" data-remove="l2img-' + i + '">Remove this item</button>' +
+      '</div>' +
     '</div>';
   });
   out += '</div>';
@@ -1268,7 +1420,11 @@ function renderContentEditor(){
       '</div>';
     });
     out += '<button class="btn-secondary" data-add="l3opt-' + i + '" style="margin-bottom:6px;">+ Add option</button>' +
-      '<button class="btn-secondary" data-remove="l3img-' + i + '">Remove this image</button>' +
+      '<div class="row" style="gap:4px; margin-top:6px;">' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-up="l3img-' + i + '" ' + (i===0?'disabled':'') + '>\u2191</button>' +
+        '<button class="btn-secondary" style="padding:5px 10px;" data-move-down="l3img-' + i + '" ' + (i===contentDraft.level3.images.length-1?'disabled':'') + '>\u2193</button>' +
+        '<button class="btn-secondary" data-remove="l3img-' + i + '">Remove this image</button>' +
+      '</div>' +
     '</div>';
   });
   out += '</div>';
@@ -1883,6 +2039,26 @@ function attachHandlers(){
           render();
         }catch(e){ console.error(e); showToast("Couldn't process that image"); }
       };
+    });
+
+    function swapAdjacent(arr, i, dir){
+      var j = i + dir;
+      if(j < 0 || j >= arr.length) return false;
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      return true;
+    }
+    function moveByKey(key, dir){
+      var m;
+      if(m = key.match(/^levelorder-(\d+)$/)) swapAdjacent(contentDraft.levelOrder, +m[1], dir);
+      else if(m = key.match(/^l1set-(\d+)$/)) swapAdjacent(contentDraft.level1.sets, +m[1], dir);
+      else if(m = key.match(/^l2img-(\d+)$/)) swapAdjacent(contentDraft.level2.images, +m[1], dir);
+      else if(m = key.match(/^l3img-(\d+)$/)) swapAdjacent(contentDraft.level3.images, +m[1], dir);
+    }
+    app.querySelectorAll("[data-move-up]").forEach(function(btn){
+      btn.onclick = function(){ moveByKey(btn.getAttribute("data-move-up"), -1); render(); };
+    });
+    app.querySelectorAll("[data-move-down]").forEach(function(btn){
+      btn.onclick = function(){ moveByKey(btn.getAttribute("data-move-down"), 1); render(); };
     });
 
     app.querySelectorAll("[data-remove]").forEach(function(btn){
