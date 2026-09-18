@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v19-2026-09-16-default-l3-labels (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v20-2026-09-16-category-tagging-multifile-export (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -380,12 +380,23 @@ function buildDefaultL3Options(){
   return STANDARD_L3_LABELS.map(function(label, i){ return { id: "o" + (i+1), text: label }; });
 }
 
+// Which method (or "Real") produced each item, tagged by the researcher for
+// later per-method breakdowns in exports.
+var METHOD_CATEGORIES = ["CXR-IRGen", "Progemu", "Qwen", "Real"];
+function categorySelectHtml(dataAttr, currentValue){
+  var opts = '<option value="" ' + (!currentValue?'selected':'') + '>Not set</option>' +
+    METHOD_CATEGORIES.map(function(c){
+      return '<option value="' + c + '" ' + (currentValue===c?'selected':'') + '>' + c + '</option>';
+    }).join("");
+  return '<label style="margin-top:6px;">Category</label><select data-category="' + dataAttr + '">' + opts + '</select>';
+}
+
 function buildDefaultMatchSet(setNum, n){
   var shapes = ['circle','square','triangle','blob'];
   var colors = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A'];
   var images = [], descriptions = [];
   for(var i=0;i<n;i++){
-    images.push({ id: 's'+setNum+'img'+(i+1), img: placeholderImg(colors[i%colors.length], shapes[i%shapes.length], 'Set '+setNum+' \u00b7 '+(i+1)), correctDescId: null });
+    images.push({ id: 's'+setNum+'img'+(i+1), img: placeholderImg(colors[i%colors.length], shapes[i%shapes.length], 'Set '+setNum+' \u00b7 '+(i+1)), correctDescId: null, category: null });
     descriptions.push({ id: 's'+setNum+'desc'+(i+1), text: 'Placeholder description ' + (i+1) + ' for matching task ' + setNum + ' \u2014 replace with real text.' });
   }
   return { id: 'set'+setNum, images: images, descriptions: descriptions };
@@ -401,18 +412,18 @@ var DEFAULT_STUDY = {
     title: "Level 2 \u2014 Real or Fake?",
     instructions: "For each item, decide whether you believe it is real or AI-generated/fake, then briefly explain your reasoning.",
     images: [
-      { id: "r1", type: "image", img: placeholderImg('#0369a1','blob','Sample 1'), reportText: "", correctVerdict: null },
-      { id: "r2", type: "image", img: placeholderImg('#be185d','blob','Sample 2'), reportText: "", correctVerdict: null },
-      { id: "r3", type: "image", img: placeholderImg('#7c3aed','blob','Sample 3'), reportText: "", correctVerdict: null }
+      { id: "r1", type: "image", img: placeholderImg('#0369a1','blob','Sample 1'), reportText: "", correctVerdict: null, category: null },
+      { id: "r2", type: "image", img: placeholderImg('#be185d','blob','Sample 2'), reportText: "", correctVerdict: null, category: null },
+      { id: "r3", type: "image", img: placeholderImg('#7c3aed','blob','Sample 3'), reportText: "", correctVerdict: null, category: null }
     ]
   },
   level3: {
     title: "Level 3 \u2014 Select the Most Relevant Option(s)",
     instructions: "For each image, check all options that you think are relevant.",
     images: [
-      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], options: buildDefaultL3Options() },
-      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), correctOptions: [], options: buildDefaultL3Options() },
-      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), correctOptions: [], options: buildDefaultL3Options() }
+      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], category: null, options: buildDefaultL3Options() },
+      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), correctOptions: [], category: null, options: buildDefaultL3Options() },
+      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), correctOptions: [], category: null, options: buildDefaultL3Options() }
     ]
   }
 };
@@ -1136,7 +1147,7 @@ function renderResearcherPanel(){
       '<h2 style="margin:0;">Results</h2>' +
       '<div class="row">' +
         '<button class="btn-secondary" id="refreshData">Refresh</button>' +
-        '<button class="btn-primary" id="exportResults">Export Results</button>' +
+        '<button class="btn-primary" id="exportResults">Export Results (5 files)</button>' +
       '</div>' +
     '</div>' +
     (researcherLoadError
@@ -1165,6 +1176,7 @@ function renderContentEditor(){
         '<img src="' + im.img + '" class="editor-thumb"/>' +
         '<label>Image ID</label><input type="text" data-edit="l1img-' + si + '-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
         '<label>Replace image</label><input type="file" accept="image/*" data-upload="l1img-' + si + '-' + i + '"/>' +
+        categorySelectHtml('l1-' + si + '-' + i, im.category) +
         '<button class="btn-secondary" style="margin-top:6px;" data-remove="l1img-' + si + '-' + i + '">Remove image</button>' +
       '</div>';
     });
@@ -1224,6 +1236,7 @@ function renderContentEditor(){
         '<label>Replace image</label><input type="file" accept="image/*" data-upload="l2img-' + i + '"/>';
     }
     out += '<label style="margin-top:6px;">Item ID</label><input type="text" data-edit="l2img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
+      categorySelectHtml('l2-' + i, im.category) +
       '<label style="margin-top:6px;">Correct answer (for scoring)</label>' +
       '<select data-answer-key="l2-' + i + '">' +
         '<option value="" ' + (!im.correctVerdict?'selected':'') + '>Not set</option>' +
@@ -1244,6 +1257,7 @@ function renderContentEditor(){
       '<img src="' + im.img + '" class="editor-thumb"/>' +
       '<label>Image ID</label><input type="text" data-edit="l3img-id-' + i + '" value="' + escapeHtml(im.id) + '"/>' +
       '<label>Replace image</label><input type="file" accept="image/*" data-upload="l3img-' + i + '"/>' +
+      categorySelectHtml('l3-' + i, im.category) +
       '<label style="margin-top:6px;">Checkbox options (edit text, and mark which are correct for scoring)</label>';
     im.options.forEach(function(o, j){
       var isCorrect = im.correctOptions.indexOf(o.id) > -1;
@@ -1268,12 +1282,13 @@ function renderContentEditor(){
 }
 
 /* ---------- scoring against researcher-defined correct answers ---------- */
-function scoreLevel1(p){
+function scoreLevel1(p, categoryFilter){
   var correct = 0, total = 0;
   var bySet = (p.level1.draft && p.level1.draft.bySet) || {};
   STUDY.level1.sets.forEach(function(set){
     var answers = bySet[set.id] || {};
     set.images.forEach(function(im){
+      if(categoryFilter && im.category !== categoryFilter) return;
       if(im.correctDescId){
         total++;
         if(answers[im.id] === im.correctDescId) correct++;
@@ -1282,10 +1297,11 @@ function scoreLevel1(p){
   });
   return { correct: correct, total: total };
 }
-function scoreLevel2(p){
+function scoreLevel2(p, categoryFilter){
   var correct = 0, total = 0;
   var answers = (p.level2.draft && p.level2.draft.answers) || {};
   STUDY.level2.images.forEach(function(im){
+    if(categoryFilter && im.category !== categoryFilter) return;
     if(im.correctVerdict){
       total++;
       var a = answers[im.id];
@@ -1294,10 +1310,11 @@ function scoreLevel2(p){
   });
   return { correct: correct, total: total };
 }
-function scoreLevel3(p){
+function scoreLevel3(p, categoryFilter){
   var correct = 0, total = 0;
   var answers = (p.level3.draft && p.level3.draft.answers) || {};
   STUDY.level3.images.forEach(function(im){
+    if(categoryFilter && im.category !== categoryFilter) return;
     if(im.correctOptions && im.correctOptions.length){
       total++;
       var a = answers[im.id];
@@ -1398,13 +1415,19 @@ function downloadBlob(filename, content, mime){
 }
 
 /* ---------- structured export: one column per image + a score column per section ---------- */
-function buildResultsMatrix(list){
+function buildResultsMatrix(list, categoryFilter){
   var headers = ["Name", "ID"];
   var colSpecs = [];
 
   STUDY.level1.sets.forEach(function(set, si){
     set.images.forEach(function(im, i){
-      headers.push("T" + (si+1) + " Image " + (i+1));
+      if(categoryFilter && im.category !== categoryFilter) return;
+      var correctLabel = "not set";
+      if(im.correctDescId){
+        var ci = set.descriptions.findIndex(function(d){ return d.id === im.correctDescId; });
+        if(ci > -1) correctLabel = String(ci + 1);
+      }
+      headers.push("T" + (si+1) + " Image " + (i+1) + " [correct: " + correctLabel + "]");
       colSpecs.push(function(p){
         var answers = (p.level1.draft && p.level1.draft.bySet && p.level1.draft.bySet[set.id]) || {};
         var given = answers[im.id];
@@ -1413,10 +1436,12 @@ function buildResultsMatrix(list){
     });
   });
   headers.push("Level 1 Score");
-  colSpecs.push(function(p){ var s = scoreLevel1(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+  colSpecs.push(function(p){ var s = scoreLevel1(p, categoryFilter); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
 
   STUDY.level2.images.forEach(function(im, i){
-    headers.push("Image " + (i+1) + " (Real/Fake)");
+    if(categoryFilter && im.category !== categoryFilter) return;
+    var correctLabel = im.correctVerdict ? im.correctVerdict : "not set";
+    headers.push("Image " + (i+1) + " (Real/Fake) [correct: " + correctLabel + "]");
     colSpecs.push(function(p){
       var answers = (p.level2.draft && p.level2.draft.answers) || {};
       var a = answers[im.id];
@@ -1424,10 +1449,14 @@ function buildResultsMatrix(list){
     });
   });
   headers.push("Level 2 Score");
-  colSpecs.push(function(p){ var s = scoreLevel2(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+  colSpecs.push(function(p){ var s = scoreLevel2(p, categoryFilter); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
 
   STUDY.level3.images.forEach(function(im, i){
-    headers.push("Image " + (i+1) + " Selected");
+    if(categoryFilter && im.category !== categoryFilter) return;
+    var correctLabel = (im.correctOptions && im.correctOptions.length)
+      ? im.correctOptions.map(function(oid){ return labelForOpt(im.id, oid); }).join(", ")
+      : "not set";
+    headers.push("Image " + (i+1) + " Selected [correct: " + correctLabel + "]");
     colSpecs.push(function(p){
       var answers = (p.level3.draft && p.level3.draft.answers) || {};
       var a = answers[im.id];
@@ -1437,13 +1466,13 @@ function buildResultsMatrix(list){
     });
   });
   headers.push("Level 3 Score");
-  colSpecs.push(function(p){ var s = scoreLevel3(p); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
+  colSpecs.push(function(p){ var s = scoreLevel3(p, categoryFilter); return { text: formatScore(s), isScore:true, frac: s.total ? s.correct/s.total : null }; });
 
   headers.push("Total Score");
   colSpecs.push(function(p){
-    var s1=scoreLevel1(p), s2=scoreLevel2(p), s3=scoreLevel3(p);
+    var s1=scoreLevel1(p, categoryFilter), s2=scoreLevel2(p, categoryFilter), s3=scoreLevel3(p, categoryFilter);
     var correct = s1.correct+s2.correct+s3.correct, total = s1.total+s2.total+s3.total;
-    return { text: total ? (correct+"/"+total) : "\u2014", isScore:true, frac: total ? correct/total : null };
+    return { text: total ? formatScore({correct:correct, total:total}) : "\u2014", isScore:true, frac: total ? correct/total : null };
   });
 
   var rows = list.map(function(p){
@@ -1452,8 +1481,8 @@ function buildResultsMatrix(list){
   return { headers: headers, rows: rows };
 }
 
-function toCSV(list){
-  var matrix = buildResultsMatrix(list);
+function toCSV(list, categoryFilter){
+  var matrix = buildResultsMatrix(list, categoryFilter);
   var rows = [matrix.headers].concat(matrix.rows.map(function(cells){ return cells.map(function(c){ return c.text; }); }));
   return rows.map(function(r){
     return r.map(function(v){ var s = String(v==null?"":v).replace(/"/g,'""'); return '"'+s+'"'; }).join(",");
@@ -1469,9 +1498,10 @@ function scoreCellColor(frac){
 // Produces an HTML table saved with an .xls extension \u2014 a well-supported
 // trick for getting real cell colors into Excel/Sheets without a binary
 // spreadsheet library. It's not a true .xlsx file, just HTML Excel can read.
-function toColorCodedExcelHtml(list){
-  var matrix = buildResultsMatrix(list);
-  var html = '<html><head><meta charset="utf-8"></head><body><table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px;">';
+function matrixToExcelHtml(matrix, title){
+  var html = '<html><head><meta charset="utf-8"></head><body>';
+  if(title) html += '<h3 style="font-family:sans-serif;">' + escapeHtml(title) + '</h3>';
+  html += '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px;">';
   html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; text-align:left; mso-number-format:\'\\@\';">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
   matrix.rows.forEach(function(cells){
     html += '<tr>' + cells.map(function(c){
@@ -1485,6 +1515,21 @@ function toColorCodedExcelHtml(list){
   });
   html += '</table></body></html>';
   return html;
+}
+function toColorCodedExcelHtml(list, categoryFilter){
+  return matrixToExcelHtml(buildResultsMatrix(list, categoryFilter));
+}
+// Builds one "compiled" sheet (everyone, everything) plus one sheet per
+// method category, each scored and colored using only that category's items.
+// Returned as separate files rather than tabs in one file, since a genuine
+// multi-sheet spreadsheet format risks inconsistent support in Google Sheets
+// \u2014 five separate files in the same proven format is more reliable.
+function buildCategoryExportFiles(list){
+  var files = [{ name: "compiled", html: matrixToExcelHtml(buildResultsMatrix(list), "Compiled \u2014 all items") }];
+  METHOD_CATEGORIES.forEach(function(cat){
+    files.push({ name: cat, html: matrixToExcelHtml(buildResultsMatrix(list, cat), cat + " \u2014 items tagged with this category") });
+  });
+  return files;
 }
 
 /* ---------- event handlers ---------- */
@@ -1581,8 +1626,13 @@ function attachHandlers(){
 
   var exportResults = document.getElementById("exportResults");
   if(exportResults) exportResults.onclick = function(){
-    downloadBlob("survey_results.xls", toColorCodedExcelHtml(researcherData), "application/vnd.ms-excel");
-    showToast("Download started \u2014 green = correct, red = incorrect");
+    var files = buildCategoryExportFiles(researcherData);
+    files.forEach(function(f, i){
+      setTimeout(function(){
+        downloadBlob("survey_results_" + f.name.replace(/[^a-zA-Z0-9_-]/g, "_") + ".xls", f.html, "application/vnd.ms-excel");
+      }, i * 350);
+    });
+    showToast("Downloading " + files.length + " files (compiled + one per category)");
   };
 
   app.querySelectorAll("[data-view-detail]").forEach(function(btn){
@@ -1751,6 +1801,17 @@ function attachHandlers(){
 
   /* ---------- content editor handlers ---------- */
   if(researcherTab === "content" && contentDraft){
+    app.querySelectorAll("[data-category]").forEach(function(sel){
+      var key = sel.getAttribute("data-category");
+      var m;
+      sel.onchange = function(){
+        var val = sel.value || null;
+        if(m = key.match(/^l1-(\d+)-(\d+)$/)) contentDraft.level1.sets[+m[1]].images[+m[2]].category = val;
+        else if(m = key.match(/^l2-(\d+)$/)) contentDraft.level2.images[+m[1]].category = val;
+        else if(m = key.match(/^l3-(\d+)$/)) contentDraft.level3.images[+m[1]].category = val;
+      };
+    });
+
     app.querySelectorAll("[data-answer-key]").forEach(function(el){
       var key = el.getAttribute("data-answer-key");
       var m;
@@ -1849,7 +1910,7 @@ function attachHandlers(){
           var n = contentDraft.level3.images[+m[1]].options.length + 1;
           contentDraft.level3.images[+m[1]].options.push({id:"o"+Date.now(), text:"New option " + n});
         } else if(m = key.match(/^l1img-(\d+)$/)){
-          contentDraft.level1.sets[+m[1]].images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','square','New Image')});
+          contentDraft.level1.sets[+m[1]].images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','square','New Image'), correctDescId:null, category:null});
         } else if(m = key.match(/^l1desc-(\d+)$/)){
           contentDraft.level1.sets[+m[1]].descriptions.push({id:"d"+Date.now(), text:"New description"});
         }
@@ -1868,7 +1929,7 @@ function attachHandlers(){
     };
     var addL2Img = document.getElementById("addL2Img");
     if(addL2Img) addL2Img.onclick = function(){
-      contentDraft.level2.images.push({id:"img"+Date.now(), type:"image", img: placeholderImg('#6b7280','blob','New Item'), reportText:"", correctVerdict:null});
+      contentDraft.level2.images.push({id:"img"+Date.now(), type:"image", img: placeholderImg('#6b7280','blob','New Item'), reportText:"", correctVerdict:null, category:null});
       render();
     };
     app.querySelectorAll("[data-l2type]").forEach(function(sel){
@@ -1889,7 +1950,7 @@ function attachHandlers(){
     });
     var addL3Img = document.getElementById("addL3Img");
     if(addL3Img) addL3Img.onclick = function(){
-      contentDraft.level3.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','triangle','New Image'), correctOptions: [], options: buildDefaultL3Options()});
+      contentDraft.level3.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','triangle','New Image'), correctOptions: [], category:null, options: buildDefaultL3Options()});
       render();
     };
 
