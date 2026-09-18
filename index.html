@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v18-2026-09-16-text-reports-delete (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v19-2026-09-16-default-l3-labels (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -369,6 +369,17 @@ function placeholderImg(bg, shape, label){
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
+// Standard finding labels used as the default checkbox options for every new
+// Level 3 panel, so you don't have to re-type them each time.
+var STANDARD_L3_LABELS = [
+  "Atelectasis","Cardiomegaly","Consolidation","Edema","Enlarged Cardiomediastinum",
+  "Fracture","Lung Lesion","Lung Opacity","No Finding","Pleural Effusion",
+  "Pleural Other","Pneumonia","Pneumothorax","Support Devices"
+];
+function buildDefaultL3Options(){
+  return STANDARD_L3_LABELS.map(function(label, i){ return { id: "o" + (i+1), text: label }; });
+}
+
 function buildDefaultMatchSet(setNum, n){
   var shapes = ['circle','square','triangle','blob'];
   var colors = ['#2F4B7C','#9C7A2E','#3F7A5C','#7A3F6E','#3F6E7A'];
@@ -399,21 +410,9 @@ var DEFAULT_STUDY = {
     title: "Level 3 \u2014 Select the Most Relevant Option(s)",
     instructions: "For each image, check all options that you think are relevant.",
     images: [
-      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], options: [
-          {id:'o1', text:'Unnatural lighting or shadows'},
-          {id:'o2', text:'Distorted proportions'},
-          {id:'o3', text:'Inconsistent background details'},
-          {id:'o4', text:'Looks completely natural'} ] },
-      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), correctOptions: [], options: [
-          {id:'o1', text:'Unnatural lighting or shadows'},
-          {id:'o2', text:'Distorted proportions'},
-          {id:'o3', text:'Inconsistent background details'},
-          {id:'o4', text:'Looks completely natural'} ] },
-      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), correctOptions: [], options: [
-          {id:'o1', text:'Unnatural lighting or shadows'},
-          {id:'o2', text:'Distorted proportions'},
-          {id:'o3', text:'Inconsistent background details'},
-          {id:'o4', text:'Looks completely natural'} ] }
+      { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], options: buildDefaultL3Options() },
+      { id: "c2", img: placeholderImg('#0d9488','circle','Item 2'), correctOptions: [], options: buildDefaultL3Options() },
+      { id: "c3", img: placeholderImg('#dc2626','triangle','Item 3'), correctOptions: [], options: buildDefaultL3Options() }
     ]
   }
 };
@@ -1890,7 +1889,7 @@ function attachHandlers(){
     });
     var addL3Img = document.getElementById("addL3Img");
     if(addL3Img) addL3Img.onclick = function(){
-      contentDraft.level3.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','triangle','New Image'), options:[{id:"o1",text:"Option 1"},{id:"o2",text:"Option 2"}]});
+      contentDraft.level3.images.push({id:"img"+Date.now(), img: placeholderImg('#6b7280','triangle','New Image'), correctOptions: [], options: buildDefaultL3Options()});
       render();
     };
 
