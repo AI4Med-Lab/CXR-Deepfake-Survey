@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v23-2026-09-16-interactive-zoom (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v24-2026-09-16-fix-level-label-position (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -419,12 +419,12 @@ function buildDefaultMatchSet(setNum, n){
 var DEFAULT_STUDY = {
   levelOrder: ["level1", "level2", "level3"],
   level1: {
-    title: "Level 1 \u2014 Match the Images",
+    title: "Match the Images",
     instructions: "Look at the images below and match each one to the description you think fits it best.",
     sets: [ buildDefaultMatchSet(1, 5), buildDefaultMatchSet(2, 5) ]
   },
   level2: {
-    title: "Level 2 \u2014 Real or Fake?",
+    title: "Real or Fake?",
     instructions: "For each item, decide whether you believe it is real or AI-generated/fake, then briefly explain your reasoning.",
     images: [
       { id: "r1", type: "image", img: placeholderImg('#0369a1','blob','Sample 1'), reportText: "", correctVerdict: null, category: null },
@@ -433,7 +433,7 @@ var DEFAULT_STUDY = {
     ]
   },
   level3: {
-    title: "Level 3 \u2014 Select the Most Relevant Option(s)",
+    title: "Select the Most Relevant Option(s)",
     instructions: "For each image, check all options that you think are relevant.",
     images: [
       { id: "c1", img: placeholderImg('#b45309','square','Item 1'), correctOptions: [], category: null, options: buildDefaultL3Options() },
@@ -450,6 +450,18 @@ function getLevelOrder(study){
   var valid = Array.isArray(order) && order.length === 3 &&
     DEFAULT_LEVEL_ORDER.every(function(k){ return order.indexOf(k) > -1; });
   return valid ? order : DEFAULT_LEVEL_ORDER.slice();
+}
+// Strips any leading "Level N \u2014 " (or "Level N - ") that might already be
+// baked into an older saved title, so we never double up when we prepend the
+// CURRENT position ourselves.
+function stripLevelPrefix(title){
+  return String(title || "").replace(/^level\s*\d+\s*[\u2014-]\s*/i, "").trim();
+}
+// The number here is always the participant-facing POSITION (from the
+// researcher's current level order), never the fixed level1/level2/level3
+// identity \u2014 so it stays correct no matter how the levels get reordered.
+function levelDisplayTitle(key, position){
+  return "Level " + position + " \u2014 " + stripLevelPrefix(STUDY[key].title);
 }
 var STUDY = cloneStudy(DEFAULT_STUDY); // overwritten by loadStudyConfig() once Firestore responds
 
@@ -998,8 +1010,8 @@ function renderDashboard(){
     level2: 'Judge real vs. fake with reasoning',
     level3: 'Select relevant option(s) per image'
   };
-  var levels = getLevelOrder(STUDY).map(function(key){
-    return { key: key, title: STUDY[key].title, desc: descByKey[key] };
+  var levels = getLevelOrder(STUDY).map(function(key, i){
+    return { key: key, title: levelDisplayTitle(key, i+1), desc: descByKey[key] };
   });
   var items = levels.map(function(l, i){
     var st = levelStatus(p, l.key);
@@ -1036,10 +1048,11 @@ function renderLevel(key){
 
   var canSubmit = levelIsComplete(key);
   var isDone = participant[key].completed;
+  var position = getLevelOrder(STUDY).indexOf(key) + 1;
 
   return '<div class="card">' +
     '<button class="link-small" id="backToDash" style="margin-bottom:14px;">&larr; Back to overview</button>' +
-    '<h2>' + conf.title + '</h2>' +
+    '<h2>' + levelDisplayTitle(key, position > 0 ? position : 1) + '</h2>' +
     '<p class="sub">' + conf.instructions + '</p>' +
     body +
     '<div class="footer-nav">' +
@@ -1293,12 +1306,11 @@ function renderContentEditor(){
   if(!contentDraft.levelOrder) contentDraft.levelOrder = getLevelOrder(STUDY);
   var out = '<p class="sub">Edit images, descriptions and options below, then Save. Changes apply to every participant immediately \u2014 including anyone mid-survey, next time they load a page.</p>';
 
-  var levelNames = { level1: "Level 1 \u2014 Matching", level2: "Level 2 \u2014 Real or Fake", level3: "Level 3 \u2014 Select Option(s)" };
   out += '<div class="set-block">' +
     '<label style="margin-bottom:8px;">Order participants see the three levels in</label>';
   contentDraft.levelOrder.forEach(function(key, i){
     out += '<div class="row between" style="padding:8px 0; ' + (i>0?'border-top:1px solid var(--line);':'') + '">' +
-      '<div style="font-size:14px; font-weight:600;">' + (i+1) + '. ' + levelNames[key] + '</div>' +
+      '<div style="font-size:14px; font-weight:600;">' + levelDisplayTitle(key, i+1) + '</div>' +
       '<div class="row" style="gap:4px;">' +
         '<button class="btn-secondary" style="padding:5px 10px;" data-move-up="levelorder-' + i + '" ' + (i===0?'disabled':'') + '>\u2191</button>' +
         '<button class="btn-secondary" style="padding:5px 10px;" data-move-down="levelorder-' + i + '" ' + (i===contentDraft.levelOrder.length-1?'disabled':'') + '>\u2193</button>' +
