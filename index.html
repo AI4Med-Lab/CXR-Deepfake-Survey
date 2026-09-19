@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v32-2026-09-16-editable-level-copy (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v33-2026-09-19-end-screen-alignment-fix (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1316,10 +1316,10 @@ function itemIsAnswered(key, imgId){
 }
 
 function renderComplete(){
-  return '<div class="card" style="text-align:center;">' +
-    '<h1>\uD83C\uDF89 Thank you, ' + escapeHtml(participant.name) + '!</h1>' +
+  return '<div class="card">' +
+    '<h1 style="text-align:center;">\uD83C\uDF89 Thank you, ' + escapeHtml(participant.name) + '!</h1>' +
     '<p class="sub">You\u2019ve completed all three tasks. Your responses have been recorded under participant ID <code>' + participant.id + '</code>.</p>' +
-    (backendOk ? '' : '<div class="warn-banner" style="text-align:left;">Heads up: your last save couldn\u2019t reach the server, so this submission may only exist on this device. Please tell the researcher your participant ID (' + participant.id + ') just in case.</div>') +
+    (backendOk ? '' : '<div class="warn-banner">Heads up: your last save couldn\u2019t reach the server, so this submission may only exist on this device. Please tell the researcher your participant ID (' + participant.id + ') just in case.</div>') +
     '<p class="sub">You may close this window now, or review your answers below.</p>' +
     '<div class="row" style="justify-content:center;">' +
       '<button class="btn-secondary" id="reviewAnswersBtn">Review My Answers</button>' +
