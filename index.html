@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v35-2026-09-19-end-screen-full-center (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v36-2026-09-20-fix-stale-match-merge (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -601,7 +601,16 @@ async function persistUpdate(id, partial){
     localSave(current);
   }
   try{
-    await fbDb.collection("participants").doc(id).set(Object.assign({}, partial, {updatedAt: Date.now()}), {merge:true});
+    var docData = Object.assign({}, partial, {updatedAt: Date.now()});
+    // {merge:true} deep-merges nested maps key-by-key, so a key removed
+    // locally (e.g. re-matching a description to a different image, which
+    // deletes the old image's entry from bySet) never gets removed server
+    // side \u2014 it just sits there alongside the new one, so the researcher
+    // view sees BOTH the old and new assignment. {mergeFields:[...]} instead
+    // replaces each named top-level field wholesale with what we send,
+    // which is safe here because payload[levelKey] is always the FULL
+    // current draft for that level, not a delta.
+    await fbDb.collection("participants").doc(id).set(docData, {mergeFields: Object.keys(docData)});
     backendOk = true;
   } catch(e){
     console.error("firestore update failed", e);
