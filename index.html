@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v39-2026-09-22-fix-table-text-contrast (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v41-2026-09-22-remove-taskwise-agreement-l3-partial-credit (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1430,9 +1430,9 @@ function renderResearcherPanel(){
 }
 
 // buildAccuracyGridMatrix/buildCompiledAgreementByCategory/ByTask/
-// buildCompiledConfusionTables/matrixToTableHtml are defined further down
-// (near the export functions they're shared with) but are function
-// declarations, so they're available here regardless of source order.
+// matrixToTableHtml are defined further down (near the export functions
+// they're shared with) but are function declarations, so they're available
+// here regardless of source order.
 function renderCompiledResults(){
   if(researcherData.length === 0){
     return '<p class="sub">No participants recorded yet.</p>';
@@ -1463,12 +1463,6 @@ function renderCompiledResults(){
 
   if(selectedList.length >= 2){
     out += matrixToTableHtml(buildCompiledAgreementByCategory(selectedList), "Inter-Reviewer Agreement by Method / Category");
-    out += matrixToTableHtml(buildCompiledAgreementByTask(selectedList), "Inter-Reviewer Agreement by Task");
-    if(selectedList.length === 2){
-      out += buildCompiledConfusionTables(selectedList);
-    } else {
-      out += '<p class="sub" style="margin-top:10px;">Confusion tables need exactly 2 selected reviewers (that’s what a 2-D table means) — with ' + selectedList.length + ' selected, agreement above uses Fleiss’ Kappa instead of Cohen’s κ/PABAK.</p>';
-    }
   } else {
     out += '<p class="sub" style="margin-top:16px;">Select 2 or more reviewers to see inter-reviewer agreement (Cohen’s κ + PABAK for exactly 2 reviewers, Fleiss’ κ for 3+).</p>';
   }
@@ -1672,6 +1666,23 @@ function scoreLevel2(p, categoryFilter){
   });
   return { correct: correct, total: total };
 }
+// Partial-credit score for one Level 3 image: the F1 score (harmonic mean
+// of precision and recall) between the selected options and the
+// researcher-marked correct options. Plain recall (correct-chosen /
+// total-correct) was considered but rejected: it's trivially gamed by
+// selecting every option, which guarantees 100% recall regardless of
+// accuracy. F1 is the standard partial-credit metric for multi-label
+// selection tasks in the literature (equivalently, the Dice coefficient)
+// because it penalizes both missed correct options (false negatives) and
+// wrongly-selected incorrect options (false positives), so a "select
+// everything" or "select nothing" strategy scores poorly.
+function level3ImageF1(sel, correctOptions){
+  var tp = sel.filter(function(s){ return correctOptions.indexOf(s) > -1; }).length;
+  var fp = sel.length - tp;
+  var fn = correctOptions.length - tp;
+  var denom = 2*tp + fp + fn;
+  return denom === 0 ? 1 : (2*tp) / denom;
+}
 function scoreLevel3(p, categoryFilter){
   var correct = 0, total = 0;
   var answers = (p.level3.draft && p.level3.draft.answers) || {};
@@ -1681,13 +1692,20 @@ function scoreLevel3(p, categoryFilter){
       total++;
       var a = answers[im.id];
       var sel = (a && a.selected) || [];
-      var same = sel.length === im.correctOptions.length && sel.every(function(s){ return im.correctOptions.indexOf(s) > -1; });
-      if(same) correct++;
+      correct += level3ImageF1(sel, im.correctOptions);
     }
   });
   return { correct: correct, total: total };
 }
-function formatScore(s){ return s.total > 0 ? (s.correct + "\u2044" + s.total + " (" + Math.round(100*s.correct/s.total) + "%)") : "\u2014"; }
+function formatScore(s){
+  if(s.total <= 0) return "\u2014";
+  // s.correct may be fractional (Level 3's partial-credit F1 scores sum to
+  // a non-integer), so round the displayed numerator to 2dp while the
+  // percentage still uses the exact value.
+  var num = Math.round(s.correct * 100) / 100;
+  var numText = (num % 1 === 0) ? String(num) : num.toFixed(2);
+  return numText + "\u2044" + s.total + " (" + Math.round(100*s.correct/s.total) + "%)";
+}
 function scoreBadgeClass(s){
   if(s.total === 0) return "todo";
   var frac = s.correct / s.total;
@@ -1695,13 +1713,10 @@ function scoreBadgeClass(s){
 }
 function isItemCorrect(kind, im, answerValue){
   // returns true/false/null (null = no correct answer defined for this item)
+  // Level 3 is scored with partial credit (see level3ImageF1), not a
+  // boolean, so it isn't handled here — callers use level3ImageF1 directly.
   if(kind === "l1"){ if(!im.correctDescId) return null; return answerValue === im.correctDescId; }
   if(kind === "l2"){ if(!im.correctVerdict) return null; return answerValue === im.correctVerdict; }
-  if(kind === "l3"){
-    if(!im.correctOptions || !im.correctOptions.length) return null;
-    var sel = answerValue || [];
-    return sel.length === im.correctOptions.length && sel.every(function(s){ return im.correctOptions.indexOf(s) > -1; });
-  }
   return null;
 }
 
@@ -1721,9 +1736,13 @@ function formatDetail(p){
     '<br/><span style="color:var(--ink-soft);">Started ' + new Date(p.createdAt).toLocaleString() + '</span></div>';
 
   function answerChip(text, correctness){
-    var style = correctness === true ? 'background:var(--success-soft); color:var(--success);'
-      : correctness === false ? 'background:var(--danger-soft); color:var(--danger);'
-      : '';
+    // correctness: true/false (exact-match items) or a 0–1 fraction
+    // (partial-credit Level 3 items) or null/undefined (unscored).
+    var style;
+    if(correctness === true || correctness === 1){ style = 'background:var(--success-soft); color:var(--success);'; }
+    else if(correctness === false || correctness === 0){ style = 'background:var(--danger-soft); color:var(--danger);'; }
+    else if(typeof correctness === "number"){ style = 'background:#fff4cc; color:#7a5c00;'; }
+    else { style = ''; }
     return '<span style="' + style + ' padding:1px 6px; border-radius:5px;">' + text + '</span>';
   }
 
@@ -1759,8 +1778,9 @@ function formatDetail(p){
   STUDY.level3.images.forEach(function(im, i){
     var a = d3[im.id];
     var sel = (a && a.selected) || [];
-    var correctness = isItemCorrect("l3", im, sel);
+    var correctness = (im.correctOptions && im.correctOptions.length) ? level3ImageF1(sel, im.correctOptions) : null;
     var text = sel.length ? escapeHtml(sel.map(function(o){return labelForOpt(im.id,o);}).join(", ")) : '<i style="color:var(--ink-soft);">no answer</i>';
+    if(typeof correctness === "number") text += ' <span style="opacity:0.75;">(' + Math.round(correctness*100) + '%)</span>';
     out += (i+1) + '. Image ' + im.id + ' \u2192 ' + answerChip(text, correctness) + '<br/>';
   });
   out += '</div>';
@@ -1934,33 +1954,6 @@ function cohensKappa(pairs){
   var pabak = K > 1 ? (K * po - 1) / (K - 1) : null;
   return { kappa: kappa, po: po, pe: pe, pabak: pabak, n: n, K: K };
 }
-function confusionMatrix(pairs){
-  var cats = {};
-  pairs.forEach(function(p){ cats[p.a] = true; cats[p.b] = true; });
-  var catList = Object.keys(cats).sort();
-  var grid = {};
-  catList.forEach(function(r){ grid[r] = {}; catList.forEach(function(c){ grid[r][c] = 0; }); });
-  pairs.forEach(function(p){ grid[p.a][p.b]++; });
-  return { categories: catList, grid: grid };
-}
-function confusionMatrixHtml(pairs, labelA, labelB){
-  var cm = confusionMatrix(pairs);
-  if(cm.categories.length === 0) return '<p class="sub">No shared items to compare.</p>';
-  // Explicit dark text (see TABLE_CELL_TEXT_COLOR note above matrixToTableHtml)
-  // — this table's cells carry their own light backgrounds regardless of
-  // the app's dark theme, so text color can't be left to inherit.
-  var html = '<table style="margin:6px 0 18px; max-width:480px; border-collapse:collapse; font-size:13px; background:#ffffff;"><thead><tr><th style="padding:8px; border-bottom:1px solid #C6C0B2;"></th>' +
-    cm.categories.map(function(c){ return '<th style="padding:8px; border-bottom:1px solid #C6C0B2; color:' + TABLE_CELL_TEXT_COLOR + '; text-align:center;">' + escapeHtml(labelB) + ': ' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
-  cm.categories.forEach(function(r){
-    html += '<tr><th style="padding:8px; border-bottom:1px solid #C6C0B2; color:' + TABLE_CELL_TEXT_COLOR + '; text-align:left;">' + escapeHtml(labelA) + ': ' + escapeHtml(r) + '</th>' + cm.categories.map(function(c){
-      var bg = r === c ? "#d7f2df" : "#ffffff";
-      return '<td style="background:' + bg + '; color:' + TABLE_CELL_TEXT_COLOR + '; padding:8px; border-bottom:1px solid #C6C0B2; text-align:center;">' + cm.grid[r][c] + '</td>';
-    }).join('') + '</tr>';
-  });
-  html += '</tbody></table>';
-  return html;
-}
-
 // Paired (reviewer-identity-tracked) rating extraction, for Cohen's Kappa —
 // contrast with level1SetRatings/level2Ratings/level3Ratings above, which
 // tally counts per category without tracking who gave which rating (used
@@ -1975,17 +1968,6 @@ function pairsForReviewersLevel1AllSets(pA, pB, categoryFilter){
       var a = ansA[im.id], b = ansB[im.id];
       if(a && b) out.push({a:a, b:b});
     });
-  });
-  return out;
-}
-function pairsForReviewersLevel1Set(pA, pB, set, categoryFilter){
-  var out = [];
-  set.images.forEach(function(im){
-    if(categoryFilter && im.category !== categoryFilter) return;
-    var ansA = (pA.level1.draft && pA.level1.draft.bySet && pA.level1.draft.bySet[set.id]) || {};
-    var ansB = (pB.level1.draft && pB.level1.draft.bySet && pB.level1.draft.bySet[set.id]) || {};
-    var a = ansA[im.id], b = ansB[im.id];
-    if(a && b) out.push({a:a, b:b});
   });
   return out;
 }
@@ -2093,36 +2075,6 @@ function buildCompiledAgreementByCategory(list){
   });
   return { headers: headers, rows: rows };
 }
-function buildCompiledAgreementByTask(list){
-  var headers = ["Task", "Ratings Compared", "Method", "Kappa", "PABAK", "Interpretation"];
-  var rows = [];
-  STUDY.level1.sets.forEach(function(set, si){
-    rows.push([{text:"Matching Task " + (si+1)}].concat(agreementMetricCells(list,
-      function(a,b){ return pairsForReviewersLevel1Set(a,b,set,null); },
-      function(){ return level1SetRatings(list,set,si,null); }
-    )));
-  });
-  rows.push([{text:"Level 2 — Real/Fake"}].concat(agreementMetricCells(list,
-    function(a,b){ return pairsForReviewersLevel2(a,b,null); },
-    function(){ return level2Ratings(list,null); }
-  )));
-  rows.push([{text:"Level 3 — Options"}].concat(agreementMetricCells(list,
-    function(a,b){ return pairsForReviewersLevel3(a,b,null); },
-    function(){ return level3Ratings(list,null); }
-  )));
-  return { headers: headers, rows: rows };
-}
-// Confusion tables (exactly 2 reviewers only — that's what a 2-D confusion
-// matrix means) for each of the 3 tasks, pooled across categories/sets.
-function buildCompiledConfusionTables(list){
-  var pA = list[0], pB = list[1];
-  var html = '<h3 style="font-family:sans-serif; margin:28px 0 6px;">Confusion Tables (' + escapeHtml(pA.name) + ' vs ' + escapeHtml(pB.name) + ')</h3>';
-  html += '<p class="sub">Matching (all tasks pooled)</p>' + confusionMatrixHtml(pairsForReviewersLevel1AllSets(pA,pB,null), pA.name, pB.name);
-  html += '<p class="sub">Real vs Fake</p>' + confusionMatrixHtml(pairsForReviewersLevel2(pA,pB,null), pA.name, pB.name);
-  html += '<p class="sub">Pathology Detection (per option)</p>' + confusionMatrixHtml(pairsForReviewersLevel3(pA,pB,null), pA.name, pB.name);
-  return html;
-}
-
 function buildAccuracyByCategoryMatrix(list){
   var headers = ["Category", "Level 1 Accuracy", "Level 2 Accuracy", "Level 3 Accuracy", "Overall Accuracy"];
   var rows = METHOD_CATEGORIES.map(function(cat){
@@ -2280,7 +2232,8 @@ function buildResultsMatrix(list, categoryFilter){
       var a = answers[im.id];
       var sel = (a && a.selected) || [];
       var text = sel.map(function(o){ return labelForOpt(im.id, o); }).join("; ");
-      return { text: text, correctness: isItemCorrect("l3", im, sel) };
+      var frac = (im.correctOptions && im.correctOptions.length) ? level3ImageF1(sel, im.correctOptions) : null;
+      return { text: text, isScore: frac !== null, frac: frac };
     });
   });
   headers.push("Level 3 Score");
@@ -2329,7 +2282,11 @@ function scoreCellColor(frac){
 var TABLE_CELL_TEXT_COLOR = "#1B2430";
 function matrixToTableHtml(matrix, title){
   var html = '';
-  if(title) html += '<h3 style="font-family:sans-serif; margin:28px 0 6px; color:' + TABLE_CELL_TEXT_COLOR + ';">' + escapeHtml(title) + '</h3>';
+  // No forced color here (unlike the table cells below): the title sits
+  // directly on whatever page it's rendered into — the app's dark-mode
+  // background live, or the exported file's plain white background — so it
+  // should inherit that context's normal text color, not the cells' fixed one.
+  if(title) html += '<h3 style="font-family:sans-serif; margin:28px 0 6px;">' + escapeHtml(title) + '</h3>';
   html += '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px; background:#ffffff;">';
   html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; color:' + TABLE_CELL_TEXT_COLOR + '; text-align:left; mso-number-format:\'\\@\';">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
   matrix.rows.forEach(function(cells){
