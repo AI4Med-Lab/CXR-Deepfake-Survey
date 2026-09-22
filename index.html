@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v36-2026-09-20-fix-stale-match-merge (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v38-2026-09-22-compiled-results-panel (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -541,6 +541,29 @@ function newParticipant(name, id){
 function freshDraftCache(){
   return { level1:{bySet:{}, currentSet:0}, level2:{answers:{}, currentIndex:0}, level3:{answers:{}, currentIndex:0} };
 }
+// One-time repair for data saved by the pre-v36 build, where {merge:true}
+// could leave a description attached to more than one image (the old
+// image's entry never got removed from Firestore). For each set, if two+
+// images point at the same description, keep only the image that appears
+// LAST in key order (the most recently written one) and drop the rest.
+// Returns true if anything was changed.
+function dedupeLevel1BySet(bySet){
+  var changed = false;
+  Object.keys(bySet || {}).forEach(function(setId){
+    var answers = bySet[setId];
+    var holderForDesc = {}; // descId -> imgId currently holding it
+    Object.keys(answers).forEach(function(imgId){
+      var descId = answers[imgId];
+      var prevHolder = holderForDesc[descId];
+      if(prevHolder !== undefined && prevHolder !== imgId){
+        delete answers[prevHolder]; // stale — a newer match for this description exists
+        changed = true;
+      }
+      holderForDesc[descId] = imgId;
+    });
+  });
+  return changed;
+}
 function loadDraftFromParticipant(p){
   var d1 = (p.level1 && p.level1.draft) || {};
   var d2 = (p.level2 && p.level2.draft) || {};
@@ -548,6 +571,11 @@ function loadDraftFromParticipant(p){
   draftCache.level1 = { bySet: d1.bySet || {}, currentSet: d1.currentSet || 0 };
   draftCache.level2 = { answers: d2.answers || {}, currentIndex: d2.currentIndex || 0 };
   draftCache.level3 = { answers: d3.answers || {}, currentIndex: d3.currentIndex || 0 };
+  if(dedupeLevel1BySet(draftCache.level1.bySet)){
+    // Data was repaired in memory — write the corrected version back so
+    // it's fixed for good, not just for this session.
+    scheduleAutosave("level1");
+  }
 }
 function genId(){
   var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -1341,12 +1369,14 @@ function renderComplete(){
 
 var researcherData = [];
 var researcherLoadError = null;
-var researcherTab = "results"; // "results" | "content"
+var researcherTab = "results"; // "results" | "compiled" | "content"
 var contentDraft = null; // working copy of STUDY while editing, null when not editing
+var selectedReviewers = {}; // participantId -> false when explicitly unchecked; absent/true = included
 
 function renderResearcherPanel(){
   var tabs = '<div class="row" style="margin-bottom:18px; gap:8px;">' +
     '<button class="' + (researcherTab==='results'?'btn-primary':'btn-secondary') + '" id="tabResults">Results</button>' +
+    '<button class="' + (researcherTab==='compiled'?'btn-primary':'btn-secondary') + '" id="tabCompiled">Compiled Results</button>' +
     '<button class="' + (researcherTab==='content'?'btn-primary':'btn-secondary') + '" id="tabContent">Manage Content</button>' +
     '<span style="flex:1;"></span>' +
     '<button class="link-small" id="signOutBtn">Sign out</button>' +
@@ -1354,6 +1384,9 @@ function renderResearcherPanel(){
 
   if(researcherTab === "content"){
     return '<div class="card">' + tabs + renderContentEditor() + '</div>';
+  }
+  if(researcherTab === "compiled"){
+    return '<div class="card">' + tabs + renderCompiledResults() + '</div>';
   }
 
   var rows = researcherData.map(function(p){
@@ -1384,7 +1417,7 @@ function renderResearcherPanel(){
       '<h2 style="margin:0;">Results</h2>' +
       '<div class="row">' +
         '<button class="btn-secondary" id="refreshData">Refresh</button>' +
-        '<button class="btn-primary" id="exportResults">Export Results (5 files)</button>' +
+        '<button class="btn-primary" id="exportResults">Export Results</button>' +
       '</div>' +
     '</div>' +
     (researcherLoadError
@@ -1394,6 +1427,52 @@ function renderResearcherPanel(){
     (researcherData.length ? '<table class="results"><thead><tr><th>Name</th><th>ID</th><th>Levels</th><th>L1 Score</th><th>L2 Score</th><th>L3 Score</th><th>Total</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
     '<div id="detailPane" style="margin-top:16px;"></div>' +
   '</div>';
+}
+
+// buildAccuracyGridMatrix/buildCompiledAgreementByCategory/ByTask/
+// buildCompiledConfusionTables/matrixToTableHtml are defined further down
+// (near the export functions they're shared with) but are function
+// declarations, so they're available here regardless of source order.
+function renderCompiledResults(){
+  if(researcherData.length === 0){
+    return '<p class="sub">No participants recorded yet.</p>';
+  }
+  var checkboxes = researcherData.map(function(p){
+    var checked = selectedReviewers[p.id] !== false;
+    return '<label style="display:inline-flex; align-items:center; gap:6px; margin:4px 14px 4px 0; font-size:13px;">' +
+      '<input type="checkbox" data-reviewer-toggle="' + p.id + '" ' + (checked?'checked':'') + '/> ' + escapeHtml(p.name) + ' (' + p.id + ')' +
+    '</label>';
+  }).join("");
+  var selectedList = researcherData.filter(function(p){ return selectedReviewers[p.id] !== false; });
+
+  var out = '<h2 style="margin-top:0;">Compiled Results</h2>';
+  out += '<p class="sub">Choose which participants count as reviewers for the combined numbers below (unchecking a row excludes them everywhere on this tab — useful for leaving out test/placeholder entries).</p>';
+  out += '<div style="margin-bottom:18px; padding:10px 14px; background:var(--panel-2); border-radius:var(--radius);">' + checkboxes + '</div>';
+
+  if(selectedList.length === 0){
+    out += '<p class="sub">Select at least one reviewer to see results.</p>';
+    return out;
+  }
+
+  out += matrixToTableHtml(
+    buildAccuracyGridMatrix(selectedList),
+    selectedList.length > 1
+      ? "Accuracy by Method × Task — mean ± SD across " + selectedList.length + " selected reviewers"
+      : "Accuracy by Method × Task — " + escapeHtml(selectedList[0].name)
+  );
+
+  if(selectedList.length >= 2){
+    out += matrixToTableHtml(buildCompiledAgreementByCategory(selectedList), "Inter-Reviewer Agreement by Method / Category");
+    out += matrixToTableHtml(buildCompiledAgreementByTask(selectedList), "Inter-Reviewer Agreement by Task");
+    if(selectedList.length === 2){
+      out += buildCompiledConfusionTables(selectedList);
+    } else {
+      out += '<p class="sub" style="margin-top:10px;">Confusion tables need exactly 2 selected reviewers (that’s what a 2-D table means) — with ' + selectedList.length + ' selected, agreement above uses Fleiss’ Kappa instead of Cohen’s κ/PABAK.</p>';
+    }
+  } else {
+    out += '<p class="sub" style="margin-top:16px;">Select 2 or more reviewers to see inter-reviewer agreement (Cohen’s κ + PABAK for exactly 2 reviewers, Fleiss’ κ for 3+).</p>';
+  }
+  return out;
 }
 
 function levelCopyEditorHtml(key){
@@ -1684,7 +1763,9 @@ function formatDetail(p){
     var text = sel.length ? escapeHtml(sel.map(function(o){return labelForOpt(im.id,o);}).join(", ")) : '<i style="color:var(--ink-soft);">no answer</i>';
     out += (i+1) + '. Image ' + im.id + ' \u2192 ' + answerChip(text, correctness) + '<br/>';
   });
-  out += '</div></div>';
+  out += '</div>';
+  out += '<div style="margin-top:14px;">' + matrixToTableHtml(buildAccuracyGridMatrix([p]), "Accuracy by Method \u00d7 Task") + '</div>';
+  out += '</div>';
   return out;
 }
 
@@ -1698,6 +1779,446 @@ function downloadBlob(filename, content, mime){
 }
 
 /* ---------- structured export: one column per image + a score column per section ---------- */
+/* ---------- inter-reviewer agreement (Fleiss' Kappa, generalized to a
+   variable number of raters per item — Fleiss, Levin & Paik, "Statistical
+   Methods for Rates and Proportions", 3rd ed., ch.18). Validated against the
+   standard Wikipedia/Fleiss worked example (10 subjects x 14 raters x 5
+   categories): this implementation reproduces every published per-subject
+   P_i value exactly and the resulting kappa (~0.21) matches the widely
+   cited figure for that example. */
+function fleissKappa(itemRatings){
+  var items = itemRatings.filter(function(it){
+    var n = 0; Object.keys(it.counts).forEach(function(c){ n += it.counts[c]; });
+    return n >= 2; // need at least 2 raters on an item to say anything about agreement
+  });
+  if(items.length === 0) return null;
+
+  var totalRatings = 0, catTotals = {};
+  items.forEach(function(it){
+    Object.keys(it.counts).forEach(function(cat){
+      catTotals[cat] = (catTotals[cat] || 0) + it.counts[cat];
+      totalRatings += it.counts[cat];
+    });
+  });
+  if(totalRatings === 0) return null;
+
+  var pE = 0;
+  Object.keys(catTotals).forEach(function(cat){
+    var pj = catTotals[cat] / totalRatings;
+    pE += pj * pj;
+  });
+
+  var pBarSum = 0;
+  items.forEach(function(it){
+    var n = 0; Object.keys(it.counts).forEach(function(c){ n += it.counts[c]; });
+    var sumSq = 0; Object.keys(it.counts).forEach(function(c){ sumSq += it.counts[c]*it.counts[c]; });
+    pBarSum += (sumSq - n) / (n * (n - 1));
+  });
+  var pBar = pBarSum / items.length;
+
+  var kappa = (pE === 1) ? (pBar === 1 ? 1 : 0) : (pBar - pE) / (1 - pE);
+  return { kappa: kappa, pBar: pBar, pE: pE, nItems: items.length, nRatings: totalRatings };
+}
+// Standard Landis & Koch (1977) benchmarks for interpreting kappa.
+function kappaInterpretation(k){
+  if(k === null || k === undefined || isNaN(k)) return "n/a";
+  if(k < 0) return "Poor (< 0)";
+  if(k <= 0.20) return "Slight";
+  if(k <= 0.40) return "Fair";
+  if(k <= 0.60) return "Moderate";
+  if(k <= 0.80) return "Substantial";
+  return "Almost perfect";
+}
+function kappaCellColor(k){
+  if(k === null || k === undefined || isNaN(k)) return "#ffffff";
+  if(k > 0.60) return "#d7f2df";
+  if(k > 0.20) return "#fff4cc";
+  return "#fbdad4";
+}
+
+// Per-item rating tallies (how many reviewers picked each category), used
+// both for per-item pairwise agreement % and as input to fleissKappa above.
+function level1SetRatings(list, set, si, categoryFilter){
+  return set.images.filter(function(im){ return !categoryFilter || im.category === categoryFilter; }).map(function(im, i){
+    var counts = {};
+    list.forEach(function(p){
+      var ans = (p.level1.draft && p.level1.draft.bySet && p.level1.draft.bySet[set.id]) || {};
+      var given = ans[im.id];
+      if(given) counts[given] = (counts[given] || 0) + 1;
+    });
+    return { label: "T" + (si+1) + " Image " + (i+1) + " (" + im.id + ")", category: im.category || "—", counts: counts };
+  });
+}
+function level2Ratings(list, categoryFilter){
+  return STUDY.level2.images.filter(function(im){ return !categoryFilter || im.category === categoryFilter; }).map(function(im, i){
+    var counts = {};
+    list.forEach(function(p){
+      var a = p.level2.draft && p.level2.draft.answers && p.level2.draft.answers[im.id];
+      if(a && a.verdict) counts[a.verdict] = (counts[a.verdict] || 0) + 1;
+    });
+    return { label: "L2 Image " + (i+1) + " (" + im.id + ")", category: im.category || "—", counts: counts };
+  });
+}
+// Each checkbox option is treated as its own binary (selected / not
+// selected) sub-item, only counting reviewers who actually answered that
+// image at all — a non-answer isn't a vote for "not selected".
+function level3Ratings(list, categoryFilter){
+  var rows = [];
+  STUDY.level3.images.forEach(function(im, i){
+    if(categoryFilter && im.category !== categoryFilter) return;
+    im.options.forEach(function(opt){
+      var counts = {};
+      list.forEach(function(p){
+        var a = p.level3.draft && p.level3.draft.answers && p.level3.draft.answers[im.id];
+        if(!a || !a.selected) return;
+        var key = a.selected.indexOf(opt.id) > -1 ? "selected" : "not_selected";
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      rows.push({ label: "L3 Image " + (i+1) + " (" + im.id + ") — “" + truncate(opt.text, 28) + "”", category: im.category || "—", counts: counts });
+    });
+  });
+  return rows;
+}
+function aggregateScore(list, levelKey, categoryFilter){
+  var scoreFn = levelKey === "level1" ? scoreLevel1 : levelKey === "level2" ? scoreLevel2 : scoreLevel3;
+  var correct = 0, total = 0;
+  list.forEach(function(p){ var s = scoreFn(p, categoryFilter); correct += s.correct; total += s.total; });
+  return { correct: correct, total: total };
+}
+function perParticipantAccuracy(p, levelKey, categoryFilter){
+  var s = aggregateScore([p], levelKey, categoryFilter);
+  return s.total ? s.correct/s.total : null;
+}
+function meanAndSD(arr){
+  var vals = arr.filter(function(v){ return v !== null && v !== undefined; });
+  if(vals.length === 0) return { mean: null, sd: null, n: 0 };
+  var mean = vals.reduce(function(a,b){ return a+b; }, 0) / vals.length;
+  if(vals.length < 2) return { mean: mean, sd: null, n: vals.length };
+  var variance = vals.reduce(function(a,v){ return a + Math.pow(v-mean,2); }, 0) / (vals.length - 1);
+  return { mean: mean, sd: Math.sqrt(variance), n: vals.length };
+}
+
+/* ---------- Cohen's Kappa (exactly 2, individually-identified reviewers)
+   + PABAK ---------- */
+// Unlike Fleiss' Kappa (which pools everyone's counts and ignores WHO made
+// each rating), Cohen's Kappa tracks two specific raters and corrects for
+// each one's OWN marginal tendency (e.g. one rater saying "fake" more
+// often than the other). Validated by hand against 4 worked cases: a
+// 2-category 80%-agreement case (kappa=0.6 exactly), perfect agreement
+// (kappa=1), a zero-variance edge case (handled without divide-by-zero),
+// and a 3-category case — all matched hand computation exactly.
+// pairs: array of { a: categoryChosenByReviewerA, b: categoryChosenByReviewerB }
+function cohensKappa(pairs){
+  if(pairs.length === 0) return null;
+  var n = pairs.length;
+  var marginA = {}, marginB = {}, agree = 0, catSet = {};
+  pairs.forEach(function(p){
+    marginA[p.a] = (marginA[p.a] || 0) + 1;
+    marginB[p.b] = (marginB[p.b] || 0) + 1;
+    catSet[p.a] = true; catSet[p.b] = true;
+    if(p.a === p.b) agree++;
+  });
+  var po = agree / n;
+  var pe = 0;
+  Object.keys(catSet).forEach(function(cat){
+    pe += ((marginA[cat]||0)/n) * ((marginB[cat]||0)/n);
+  });
+  var kappa = (pe === 1) ? (po === 1 ? 1 : 0) : (po - pe) / (1 - pe);
+  // Prevalence- and Bias-Adjusted Kappa (Byrt et al. 1993), generalized from
+  // its standard 2x2 form (PABAK = 2*po - 1) to K categories by replacing
+  // the by-chance agreement rate with the uniform 1/K baseline instead of
+  // Cohen's marginal-based pe — addresses the "kappa paradox" where kappa
+  // looks artificially low under skewed category prevalence despite high
+  // raw agreement. Undefined (and omitted) when K=1 (no variation at all).
+  var K = Object.keys(catSet).length;
+  var pabak = K > 1 ? (K * po - 1) / (K - 1) : null;
+  return { kappa: kappa, po: po, pe: pe, pabak: pabak, n: n, K: K };
+}
+function confusionMatrix(pairs){
+  var cats = {};
+  pairs.forEach(function(p){ cats[p.a] = true; cats[p.b] = true; });
+  var catList = Object.keys(cats).sort();
+  var grid = {};
+  catList.forEach(function(r){ grid[r] = {}; catList.forEach(function(c){ grid[r][c] = 0; }); });
+  pairs.forEach(function(p){ grid[p.a][p.b]++; });
+  return { categories: catList, grid: grid };
+}
+function confusionMatrixHtml(pairs, labelA, labelB){
+  var cm = confusionMatrix(pairs);
+  if(cm.categories.length === 0) return '<p class="sub">No shared items to compare.</p>';
+  var html = '<table class="results" style="margin:6px 0 18px; max-width:480px;"><thead><tr><th></th>' +
+    cm.categories.map(function(c){ return '<th>' + escapeHtml(labelB) + ': ' + escapeHtml(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  cm.categories.forEach(function(r){
+    html += '<tr><th style="text-align:left;">' + escapeHtml(labelA) + ': ' + escapeHtml(r) + '</th>' + cm.categories.map(function(c){
+      var bg = r === c ? "#d7f2df" : "#ffffff";
+      return '<td style="background:' + bg + '; text-align:center;">' + cm.grid[r][c] + '</td>';
+    }).join('') + '</tr>';
+  });
+  html += '</tbody></table>';
+  return html;
+}
+
+// Paired (reviewer-identity-tracked) rating extraction, for Cohen's Kappa —
+// contrast with level1SetRatings/level2Ratings/level3Ratings above, which
+// tally counts per category without tracking who gave which rating (used
+// by the Fleiss' Kappa path for 3+ reviewers).
+function pairsForReviewersLevel1AllSets(pA, pB, categoryFilter){
+  var out = [];
+  STUDY.level1.sets.forEach(function(set){
+    set.images.forEach(function(im){
+      if(categoryFilter && im.category !== categoryFilter) return;
+      var ansA = (pA.level1.draft && pA.level1.draft.bySet && pA.level1.draft.bySet[set.id]) || {};
+      var ansB = (pB.level1.draft && pB.level1.draft.bySet && pB.level1.draft.bySet[set.id]) || {};
+      var a = ansA[im.id], b = ansB[im.id];
+      if(a && b) out.push({a:a, b:b});
+    });
+  });
+  return out;
+}
+function pairsForReviewersLevel1Set(pA, pB, set, categoryFilter){
+  var out = [];
+  set.images.forEach(function(im){
+    if(categoryFilter && im.category !== categoryFilter) return;
+    var ansA = (pA.level1.draft && pA.level1.draft.bySet && pA.level1.draft.bySet[set.id]) || {};
+    var ansB = (pB.level1.draft && pB.level1.draft.bySet && pB.level1.draft.bySet[set.id]) || {};
+    var a = ansA[im.id], b = ansB[im.id];
+    if(a && b) out.push({a:a, b:b});
+  });
+  return out;
+}
+function pairsForReviewersLevel2(pA, pB, categoryFilter){
+  var out = [];
+  STUDY.level2.images.forEach(function(im){
+    if(categoryFilter && im.category !== categoryFilter) return;
+    var aAns = pA.level2.draft && pA.level2.draft.answers && pA.level2.draft.answers[im.id];
+    var bAns = pB.level2.draft && pB.level2.draft.answers && pB.level2.draft.answers[im.id];
+    if(aAns && aAns.verdict && bAns && bAns.verdict) out.push({a:aAns.verdict, b:bAns.verdict});
+  });
+  return out;
+}
+function pairsForReviewersLevel3(pA, pB, categoryFilter){
+  var out = [];
+  STUDY.level3.images.forEach(function(im){
+    if(categoryFilter && im.category !== categoryFilter) return;
+    var aAns = pA.level3.draft && pA.level3.draft.answers && pA.level3.draft.answers[im.id];
+    var bAns = pB.level3.draft && pB.level3.draft.answers && pB.level3.draft.answers[im.id];
+    if(!aAns || !aAns.selected || !bAns || !bAns.selected) return;
+    im.options.forEach(function(opt){
+      var aSel = aAns.selected.indexOf(opt.id) > -1 ? "selected" : "not_selected";
+      var bSel = bAns.selected.indexOf(opt.id) > -1 ? "selected" : "not_selected";
+      out.push({a:aSel, b:bSel});
+    });
+  });
+  return out;
+}
+
+// Picks Cohen's Kappa+PABAK for exactly 2 selected reviewers, or Fleiss'
+// Kappa for 3+ (Cohen's formula only applies to two identified raters).
+function agreementMetricCells(list, pairsFnFor2, ratingsFnForN){
+  if(list.length === 2){
+    var pairs = pairsFnFor2(list[0], list[1]);
+    if(pairs.length === 0) return [{text:"0"}, {text:"Cohen’s κ"}, {text:"n/a"}, {text:"n/a"}, {text:"insufficient data"}];
+    var r = cohensKappa(pairs);
+    return [
+      {text:String(r.n)}, {text:"Cohen’s κ"},
+      {text:r.kappa.toFixed(3), bg:kappaCellColor(r.kappa)},
+      {text: r.pabak===null ? "n/a" : r.pabak.toFixed(3)},
+      {text:kappaInterpretation(r.kappa)}
+    ];
+  }
+  if(list.length >= 3){
+    var ratings = ratingsFnForN();
+    var res = fleissKappa(ratings);
+    if(!res) return [{text:"0"}, {text:"Fleiss’ κ"}, {text:"n/a"}, {text:"—"}, {text:"insufficient data"}];
+    return [
+      {text:String(res.nItems)}, {text:"Fleiss’ κ"},
+      {text:res.kappa.toFixed(3), bg:kappaCellColor(res.kappa)},
+      {text:"—"},
+      {text:kappaInterpretation(res.kappa)}
+    ];
+  }
+  return [{text:"0"}, {text:"—"}, {text:"n/a"}, {text:"n/a"}, {text:"select 2+ reviewers"}];
+}
+
+var TASK_LEVELS = [
+  { key:"level1", label:"Matching" },
+  { key:"level2", label:"Real vs Fake" },
+  { key:"level3", label:"Pathology Detection" }
+];
+// One reviewer selected → that reviewer's own accuracy per cell.
+// 2+ reviewers selected → macro-average (mean of each reviewer's OWN
+// accuracy, not pooled raw answers) ± sample standard deviation, so a
+// reviewer who completed more items doesn't dominate the combined number,
+// and the spread across reviewers is visible alongside the mean.
+function buildAccuracyGridMatrix(list){
+  var headers = ["Method"].concat(TASK_LEVELS.map(function(t){ return t.label; }));
+  var rows = METHOD_CATEGORIES.map(function(cat){
+    var cells = TASK_LEVELS.map(function(t){
+      if(list.length === 0) return {text:"—"};
+      if(list.length === 1){
+        var s = aggregateScore(list, t.key, cat);
+        return { text: s.total ? formatScore(s) : "—", isScore:true, frac: s.total ? s.correct/s.total : null };
+      }
+      var fracs = list.map(function(p){ return perParticipantAccuracy(p, t.key, cat); });
+      var ms = meanAndSD(fracs);
+      if(ms.mean === null) return {text:"—"};
+      var text = (Math.round(ms.mean*1000)/10) + "%" + (ms.sd !== null ? " ± " + (Math.round(ms.sd*1000)/10) : "") + " (n=" + ms.n + ")";
+      return { text: text, isScore:true, frac: ms.mean };
+    });
+    return [{text:cat}].concat(cells);
+  });
+  return { headers: headers, rows: rows };
+}
+function buildCompiledAgreementByCategory(list){
+  var headers = ["Level", "Category", "Ratings Compared", "Method", "Kappa", "PABAK", "Interpretation"];
+  var rows = [];
+  METHOD_CATEGORIES.forEach(function(cat){
+    var groups = [
+      { label:"Level 1 — Matching (all tasks pooled)",
+        pairsFn: function(a,b){ return pairsForReviewersLevel1AllSets(a,b,cat); },
+        ratingsFn: function(){ var l1=[]; STUDY.level1.sets.forEach(function(set,si){ l1=l1.concat(level1SetRatings(list,set,si,cat)); }); return l1; } },
+      { label:"Level 2 — Real/Fake",
+        pairsFn: function(a,b){ return pairsForReviewersLevel2(a,b,cat); },
+        ratingsFn: function(){ return level2Ratings(list,cat); } },
+      { label:"Level 3 — Options",
+        pairsFn: function(a,b){ return pairsForReviewersLevel3(a,b,cat); },
+        ratingsFn: function(){ return level3Ratings(list,cat); } }
+    ];
+    groups.forEach(function(g){
+      rows.push([{text:g.label}, {text:cat}].concat(agreementMetricCells(list, g.pairsFn, g.ratingsFn)));
+    });
+  });
+  return { headers: headers, rows: rows };
+}
+function buildCompiledAgreementByTask(list){
+  var headers = ["Task", "Ratings Compared", "Method", "Kappa", "PABAK", "Interpretation"];
+  var rows = [];
+  STUDY.level1.sets.forEach(function(set, si){
+    rows.push([{text:"Matching Task " + (si+1)}].concat(agreementMetricCells(list,
+      function(a,b){ return pairsForReviewersLevel1Set(a,b,set,null); },
+      function(){ return level1SetRatings(list,set,si,null); }
+    )));
+  });
+  rows.push([{text:"Level 2 — Real/Fake"}].concat(agreementMetricCells(list,
+    function(a,b){ return pairsForReviewersLevel2(a,b,null); },
+    function(){ return level2Ratings(list,null); }
+  )));
+  rows.push([{text:"Level 3 — Options"}].concat(agreementMetricCells(list,
+    function(a,b){ return pairsForReviewersLevel3(a,b,null); },
+    function(){ return level3Ratings(list,null); }
+  )));
+  return { headers: headers, rows: rows };
+}
+// Confusion tables (exactly 2 reviewers only — that's what a 2-D confusion
+// matrix means) for each of the 3 tasks, pooled across categories/sets.
+function buildCompiledConfusionTables(list){
+  var pA = list[0], pB = list[1];
+  var html = '<h3 style="font-family:sans-serif; margin:28px 0 6px;">Confusion Tables (' + escapeHtml(pA.name) + ' vs ' + escapeHtml(pB.name) + ')</h3>';
+  html += '<p class="sub">Matching (all tasks pooled)</p>' + confusionMatrixHtml(pairsForReviewersLevel1AllSets(pA,pB,null), pA.name, pB.name);
+  html += '<p class="sub">Real vs Fake</p>' + confusionMatrixHtml(pairsForReviewersLevel2(pA,pB,null), pA.name, pB.name);
+  html += '<p class="sub">Pathology Detection (per option)</p>' + confusionMatrixHtml(pairsForReviewersLevel3(pA,pB,null), pA.name, pB.name);
+  return html;
+}
+
+function buildAccuracyByCategoryMatrix(list){
+  var headers = ["Category", "Level 1 Accuracy", "Level 2 Accuracy", "Level 3 Accuracy", "Overall Accuracy"];
+  var rows = METHOD_CATEGORIES.map(function(cat){
+    var s1 = aggregateScore(list, "level1", cat), s2 = aggregateScore(list, "level2", cat), s3 = aggregateScore(list, "level3", cat);
+    var sT = { correct: s1.correct+s2.correct+s3.correct, total: s1.total+s2.total+s3.total };
+    return [
+      {text: cat},
+      {text: formatScore(s1), isScore:true, frac: s1.total ? s1.correct/s1.total : null},
+      {text: formatScore(s2), isScore:true, frac: s2.total ? s2.correct/s2.total : null},
+      {text: formatScore(s3), isScore:true, frac: s3.total ? s3.correct/s3.total : null},
+      {text: formatScore(sT), isScore:true, frac: sT.total ? sT.correct/sT.total : null}
+    ];
+  });
+  return { headers: headers, rows: rows };
+}
+function buildAccuracyByTaskMatrix(list){
+  var headers = ["Task", "Items Scored", "Accuracy"];
+  var rows = [];
+  STUDY.level1.sets.forEach(function(set, si){
+    var correct = 0, total = 0;
+    list.forEach(function(p){
+      var answers = (p.level1.draft && p.level1.draft.bySet && p.level1.draft.bySet[set.id]) || {};
+      set.images.forEach(function(im){
+        if(im.correctDescId){ total++; if(answers[im.id] === im.correctDescId) correct++; }
+      });
+    });
+    rows.push([{text:"Matching Task " + (si+1)}, {text:String(total)}, {text: formatScore({correct:correct,total:total}), isScore:true, frac: total ? correct/total : null}]);
+  });
+  var s2 = aggregateScore(list, "level2", null);
+  rows.push([{text:"Level 2 — Real/Fake"}, {text:String(s2.total)}, {text: formatScore(s2), isScore:true, frac: s2.total ? s2.correct/s2.total : null}]);
+  var s3 = aggregateScore(list, "level3", null);
+  rows.push([{text:"Level 3 — Options"}, {text:String(s3.total)}, {text: formatScore(s3), isScore:true, frac: s3.total ? s3.correct/s3.total : null}]);
+  return { headers: headers, rows: rows };
+}
+
+// Agreement, way 1: per item. Kappa isn't meaningful on a single item (it
+// needs a set of items to estimate a chance-agreement baseline from), so
+// here we report plain pairwise agreement % instead — the proportion of
+// reviewer PAIRS on that item who picked the same answer.
+function buildAgreementByItemMatrix(list){
+  var headers = ["Item", "Category", "Reviewers", "Pairwise Agreement"];
+  var allRows = [];
+  STUDY.level1.sets.forEach(function(set, si){ allRows = allRows.concat(level1SetRatings(list, set, si, null)); });
+  allRows = allRows.concat(level2Ratings(list, null));
+  allRows = allRows.concat(level3Ratings(list, null));
+  var rows = allRows.map(function(r){
+    var n = 0; Object.keys(r.counts).forEach(function(c){ n += r.counts[c]; });
+    if(n < 2) return [{text:r.label}, {text:r.category}, {text:String(n)}, {text:"— (needs 2+ reviewers)"}];
+    var sumSq = 0; Object.keys(r.counts).forEach(function(c){ sumSq += r.counts[c]*r.counts[c]; });
+    var pI = (sumSq - n) / (n * (n - 1));
+    return [{text:r.label}, {text:r.category}, {text:String(n)}, {text: Math.round(pI*1000)/10 + "%", isScore:true, frac: pI}];
+  });
+  return { headers: headers, rows: rows };
+}
+// Agreement, way 2: by method/category, split by level (each level has its
+// own category space so they can't be pooled together — Level 1's "which
+// description" categories aren't comparable to Level 2's real/fake ones).
+function buildAgreementByCategoryMatrix(list){
+  var headers = ["Level", "Category", "Items (2+ reviewers)", "Total Ratings", "Fleiss’ Kappa", "Interpretation"];
+  var rows = [];
+  function addRow(levelLabel, cat, ratings){
+    var res = fleissKappa(ratings.map(function(r){ return {counts:r.counts}; }));
+    if(!res){ rows.push([{text:levelLabel},{text:cat},{text:"0"},{text:"0"},{text:"n/a"},{text:"insufficient data"}]); return; }
+    rows.push([
+      {text:levelLabel}, {text:cat}, {text:String(res.nItems)}, {text:String(res.nRatings)},
+      {text: res.kappa.toFixed(3), bg: kappaCellColor(res.kappa)},
+      {text: kappaInterpretation(res.kappa)}
+    ]);
+  }
+  METHOD_CATEGORIES.concat([null]).forEach(function(cat){
+    var label = cat || "All categories";
+    var l1 = []; STUDY.level1.sets.forEach(function(set, si){ l1 = l1.concat(level1SetRatings(list, set, si, cat)); });
+    addRow("Level 1 — Matching (all tasks pooled)", label, l1);
+    addRow("Level 2 — Real/Fake", label, level2Ratings(list, cat));
+    addRow("Level 3 — Options", label, level3Ratings(list, cat));
+  });
+  return { headers: headers, rows: rows };
+}
+// Agreement, way 3: by task (each matching task separately, since their
+// description lists aren't comparable to each other either; Level 2 and
+// Level 3 each have just the one task).
+function buildAgreementByTaskMatrix(list){
+  var headers = ["Task", "Items (2+ reviewers)", "Total Ratings", "Fleiss’ Kappa", "Interpretation"];
+  var rows = [];
+  function addRow(label, ratings){
+    var res = fleissKappa(ratings.map(function(r){ return {counts:r.counts}; }));
+    if(!res){ rows.push([{text:label},{text:"0"},{text:"0"},{text:"n/a"},{text:"insufficient data"}]); return; }
+    rows.push([
+      {text:label}, {text:String(res.nItems)}, {text:String(res.nRatings)},
+      {text: res.kappa.toFixed(3), bg: kappaCellColor(res.kappa)},
+      {text: kappaInterpretation(res.kappa)}
+    ]);
+  }
+  STUDY.level1.sets.forEach(function(set, si){ addRow("Matching Task " + (si+1), level1SetRatings(list, set, si, null)); });
+  addRow("Level 2 — Real/Fake", level2Ratings(list, null));
+  addRow("Level 3 — Options", level3Ratings(list, null));
+  return { headers: headers, rows: rows };
+}
+
 function buildResultsMatrix(list, categoryFilter){
   var headers = ["Name", "ID"];
   var colSpecs = [];
@@ -1792,14 +2313,19 @@ function scoreCellColor(frac){
 // Produces an HTML table saved with an .xls extension \u2014 a well-supported
 // trick for getting real cell colors into Excel/Sheets without a binary
 // spreadsheet library. It's not a true .xlsx file, just HTML Excel can read.
-function matrixToExcelHtml(matrix, title){
-  var html = '<html><head><meta charset="utf-8"></head><body>';
-  if(title) html += '<h3 style="font-family:sans-serif;">' + escapeHtml(title) + '</h3>';
+// Renders one matrix as a <table> (no surrounding <html>/<body>), so several
+// of these can be concatenated into a single document with one call.
+function matrixToTableHtml(matrix, title){
+  var html = '';
+  if(title) html += '<h3 style="font-family:sans-serif; margin:28px 0 6px;">' + escapeHtml(title) + '</h3>';
   html += '<table border="1" cellspacing="0" cellpadding="6" style="border-collapse:collapse; font-family:sans-serif; font-size:13px;">';
   html += '<tr>' + matrix.headers.map(function(h){ return '<th style="background:#e8e8e8; text-align:left; mso-number-format:\'\\@\';">' + escapeHtml(h) + '</th>'; }).join('') + '</tr>';
   matrix.rows.forEach(function(cells){
     html += '<tr>' + cells.map(function(c){
-      var bg = c.correctness === true ? "#d7f2df" : c.correctness === false ? "#fbdad4" : (c.isScore ? scoreCellColor(c.frac) : "#ffffff");
+      // c.bg lets a section (e.g. kappa, which uses Landis & Koch thresholds
+      // rather than the 0.8/0.5 accuracy thresholds) pick its own color scale;
+      // otherwise fall back to the correctness/accuracy coloring used elsewhere.
+      var bg = c.bg || (c.correctness === true ? "#d7f2df" : c.correctness === false ? "#fbdad4" : (c.isScore ? scoreCellColor(c.frac) : "#ffffff"));
       // mso-number-format:'\@' forces Excel to treat the cell as plain text
       // (Google Sheets ignores this hint but no longer needs it \u2014 the
       // fraction-slash character in formatScore() already prevents the
@@ -1807,23 +2333,36 @@ function matrixToExcelHtml(matrix, title){
       return '<td style="background:' + bg + '; mso-number-format:\'\\@\';">' + escapeHtml(c.text) + '</td>';
     }).join('') + '</tr>';
   });
-  html += '</table></body></html>';
+  html += '</table>';
   return html;
 }
-function toColorCodedExcelHtml(list, categoryFilter){
-  return matrixToExcelHtml(buildResultsMatrix(list, categoryFilter));
+// Produces an HTML document (saved with an .xls extension \u2014 a well-supported
+// trick for getting real cell colors into Excel/Sheets without a binary
+// spreadsheet library. It's not a true .xlsx file, just HTML Excel can read)
+// containing one or more of the tables above, in order.
+function sectionsToExcelHtml(sections){
+  var body = sections.map(function(s){ return matrixToTableHtml(s.matrix, s.title); }).join('');
+  return '<html><head><meta charset="utf-8"></head><body>' + body + '</body></html>';
 }
-// Builds one "compiled" sheet (everyone, everything) plus one sheet per
-// method category, each scored and colored using only that category's items.
-// Returned as separate files rather than tabs in one file, since a genuine
-// multi-sheet spreadsheet format risks inconsistent support in Google Sheets
-// \u2014 five separate files in the same proven format is more reliable.
-function buildCategoryExportFiles(list){
-  var files = [{ name: "compiled", html: matrixToExcelHtml(buildResultsMatrix(list), "Compiled \u2014 all items") }];
-  METHOD_CATEGORIES.forEach(function(cat){
-    files.push({ name: cat, html: matrixToExcelHtml(buildResultsMatrix(list, cat), cat + " \u2014 items tagged with this category") });
-  });
-  return files;
+function matrixToExcelHtml(matrix, title){
+  return sectionsToExcelHtml([{ matrix: matrix, title: title }]);
+}
+// A single unified export: the full raw per-item answer matrix, accuracy
+// broken down by method/category and by task, and inter-reviewer agreement
+// broken down all three ways (per item, by category, by task). One file,
+// since a genuine multi-sheet spreadsheet risks inconsistent support in
+// Google Sheets \u2014 separate clearly-titled tables in one proven HTML-table
+// file is more reliable, and Excel/Sheets' own column filters can be turned
+// on by hand on the raw matrix if you want to slice it further.
+function buildUnifiedExportHtml(list){
+  return sectionsToExcelHtml([
+    { matrix: buildResultsMatrix(list), title: "Full Results \u2014 every participant, every item" },
+    { matrix: buildAccuracyByCategoryMatrix(list), title: "Accuracy by Method / Category" },
+    { matrix: buildAccuracyByTaskMatrix(list), title: "Accuracy by Task" },
+    { matrix: buildAgreementByItemMatrix(list), title: "Inter-Reviewer Agreement \u2014 by Item (pairwise agreement %; Fleiss\u2019 Kappa isn\u2019t meaningful on a single item)" },
+    { matrix: buildAgreementByCategoryMatrix(list), title: "Inter-Reviewer Agreement \u2014 by Method / Category (Fleiss\u2019 Kappa)" },
+    { matrix: buildAgreementByTaskMatrix(list), title: "Inter-Reviewer Agreement \u2014 by Task (Fleiss\u2019 Kappa)" }
+  ]);
 }
 
 /* ---------- event handlers ---------- */
@@ -1905,8 +2444,18 @@ function attachHandlers(){
 
   var tabResults = document.getElementById("tabResults");
   if(tabResults) tabResults.onclick = function(){ researcherTab = "results"; render(); };
+  var tabCompiled = document.getElementById("tabCompiled");
+  if(tabCompiled) tabCompiled.onclick = function(){ researcherTab = "compiled"; render(); };
   var tabContent = document.getElementById("tabContent");
   if(tabContent) tabContent.onclick = function(){ researcherTab = "content"; contentDraft = contentDraft || cloneStudy(STUDY); render(); };
+
+  app.querySelectorAll("[data-reviewer-toggle]").forEach(function(box){
+    box.onclick = function(){
+      var id = box.getAttribute("data-reviewer-toggle");
+      selectedReviewers[id] = box.checked;
+      render();
+    };
+  });
 
   var refreshData = document.getElementById("refreshData");
   if(refreshData) refreshData.onclick = async function(){
@@ -1920,13 +2469,9 @@ function attachHandlers(){
 
   var exportResults = document.getElementById("exportResults");
   if(exportResults) exportResults.onclick = function(){
-    var files = buildCategoryExportFiles(researcherData);
-    files.forEach(function(f, i){
-      setTimeout(function(){
-        downloadBlob("survey_results_" + f.name.replace(/[^a-zA-Z0-9_-]/g, "_") + ".xls", f.html, "application/vnd.ms-excel");
-      }, i * 350);
-    });
-    showToast("Downloading " + files.length + " files (compiled + one per category)");
+    var html = buildUnifiedExportHtml(researcherData);
+    downloadBlob("survey_results.xls", html, "application/vnd.ms-excel");
+    showToast("Downloading results");
   };
 
   app.querySelectorAll("[data-view-detail]").forEach(function(btn){
