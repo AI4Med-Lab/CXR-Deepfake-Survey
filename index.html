@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- BUILD MARKER: v41-2026-09-22-remove-taskwise-agreement-l3-partial-credit (view-source and check this matches what you expect) -->
+<!-- BUILD MARKER: v42-2026-09-23-l1-l2-precision-recall-f1-tables (view-source and check this matches what you expect) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1461,6 +1461,9 @@ function renderCompiledResults(){
       : "Accuracy by Method × Task — " + escapeHtml(selectedList[0].name)
   );
 
+  out += matrixToTableHtml(buildLevel1MetricsMatrix(selectedList), "Matching — Accuracy, Precision, Recall, F1 & Agreement (all methods combined)");
+  out += matrixToTableHtml(buildLevel2MetricsMatrix(selectedList), "Real vs Fake — Accuracy, Precision, Recall, F1 & Agreement, by Item Type (all methods combined)");
+
   if(selectedList.length >= 2){
     out += matrixToTableHtml(buildCompiledAgreementByCategory(selectedList), "Inter-Reviewer Agreement by Method / Category");
   } else {
@@ -1981,6 +1984,34 @@ function pairsForReviewersLevel2(pA, pB, categoryFilter){
   });
   return out;
 }
+// Same as pairsForReviewersLevel2, but split by item type (image vs text
+// report) instead of by method/category — pools all methods together,
+// per the "images and reports (all methods combined)" breakdown.
+function pairsForReviewersLevel2ByType(pA, pB, itemType){
+  var out = [];
+  STUDY.level2.images.forEach(function(im){
+    var isText = im.type === "text";
+    if(itemType === "text" && !isText) return;
+    if(itemType === "image" && isText) return;
+    var aAns = pA.level2.draft && pA.level2.draft.answers && pA.level2.draft.answers[im.id];
+    var bAns = pB.level2.draft && pB.level2.draft.answers && pB.level2.draft.answers[im.id];
+    if(aAns && aAns.verdict && bAns && bAns.verdict) out.push({a:aAns.verdict, b:bAns.verdict});
+  });
+  return out;
+}
+function level2RatingsByType(list, itemType){
+  return STUDY.level2.images.filter(function(im){
+    var isText = im.type === "text";
+    return itemType === "text" ? isText : !isText;
+  }).map(function(im, i){
+    var counts = {};
+    list.forEach(function(p){
+      var a = p.level2.draft && p.level2.draft.answers && p.level2.draft.answers[im.id];
+      if(a && a.verdict) counts[a.verdict] = (counts[a.verdict] || 0) + 1;
+    });
+    return { label: "L2 Item " + (i+1) + " (" + im.id + ")", category: im.category || "—", counts: counts };
+  });
+}
 function pairsForReviewersLevel3(pA, pB, categoryFilter){
   var out = [];
   STUDY.level3.images.forEach(function(im){
@@ -2075,6 +2106,148 @@ function buildCompiledAgreementByCategory(list){
   });
   return { headers: headers, rows: rows };
 }
+// ---- Precision / Recall / F1, in addition to plain accuracy ----
+// Accuracy alone treats every item equally regardless of which class it
+// belongs to; Precision/Recall/F1 expose class-level imbalance (e.g. a
+// reviewer who is great on one description but weak on another averages
+// out to a decent accuracy while still having a real per-class weakness).
+
+// Level 1 (Matching): each set's descriptions are the "classes" for that
+// set (pooled across all sets, since class identity — description id — is
+// only meaningful within its own set). This is standard multi-class
+// macro-averaged Precision/Recall/F1 (scikit-learn's average='macro',
+// zero_division=0 convention): computed per class, then arithmetic-mean
+// across classes, so a rarely-correct description counts as much as a
+// common one — unlike accuracy, and unlike micro-averaging, which for a
+// single-label multi-class task like this is mathematically identical to
+// accuracy and would add no new information.
+function level1MacroPRF(p){
+  var bySet = (p.level1.draft && p.level1.draft.bySet) || {};
+  var classStats = {};
+  var correct = 0, total = 0;
+  function stat(key){ if(!classStats[key]) classStats[key] = {tp:0, fp:0, fn:0, hasTrue:false}; return classStats[key]; }
+  STUDY.level1.sets.forEach(function(set){
+    var answers = bySet[set.id] || {};
+    set.images.forEach(function(im){
+      if(!im.correctDescId) return;
+      total++;
+      var given = answers[im.id];
+      var trueStat = stat(set.id + "::" + im.correctDescId);
+      trueStat.hasTrue = true;
+      if(given === im.correctDescId){
+        correct++; trueStat.tp++;
+      } else {
+        trueStat.fn++;
+        if(given) stat(set.id + "::" + given).fp++;
+      }
+    });
+  });
+  var precisions = [], recalls = [], f1s = [];
+  Object.keys(classStats).forEach(function(k){
+    var c = classStats[k];
+    if(!c.hasTrue) return; // only classes with a ground-truth instance are scored
+    precisions.push((c.tp+c.fp) > 0 ? c.tp/(c.tp+c.fp) : 0);
+    recalls.push(c.tp / (c.tp+c.fn)); // hasTrue guarantees tp+fn > 0
+    f1s.push((2*c.tp) / (2*c.tp+c.fp+c.fn));
+  });
+  function avg(arr){ return arr.length ? arr.reduce(function(a,b){return a+b;},0)/arr.length : null; }
+  return {
+    n: total,
+    accuracy: total > 0 ? correct/total : null,
+    precision: avg(precisions),
+    recall: avg(recalls),
+    f1: avg(f1s)
+  };
+}
+
+// Level 2 (Real vs Fake): a genuine binary classification, so Precision/
+// Recall/F1 are computed directly with "fake" as the positive class —
+// i.e. these measure how well a reviewer catches fakes, the standard
+// framing in deepfake-detection literature ("Real" being flagged correctly
+// is captured by Recall's complement / by Accuracy, not lost). itemType
+// filters to only "image" or only "text" (report) items when given.
+function level2PRF(p, itemType){
+  var answers = (p.level2.draft && p.level2.draft.answers) || {};
+  var tp=0, fp=0, fn=0, correct=0, total=0;
+  STUDY.level2.images.forEach(function(im){
+    if(itemType){
+      var isText = im.type === "text";
+      if(itemType === "text" && !isText) return;
+      if(itemType === "image" && isText) return;
+    }
+    if(!im.correctVerdict) return;
+    total++;
+    var a = answers[im.id];
+    var given = a && a.verdict;
+    if(given === im.correctVerdict) correct++;
+    var predFake = given === "fake", actualFake = im.correctVerdict === "fake";
+    if(predFake && actualFake) tp++;
+    else if(predFake && !actualFake) fp++;
+    else if(!predFake && actualFake) fn++;
+  });
+  return {
+    n: total,
+    accuracy: total > 0 ? correct/total : null,
+    precision: (tp+fp) > 0 ? tp/(tp+fp) : (total>0 ? 0 : null),
+    recall: (tp+fn) > 0 ? tp/(tp+fn) : (total>0 ? 0 : null),
+    f1: total > 0 ? (2*tp)/(2*tp+fp+fn || 1) : null
+  };
+}
+
+// Combines one metric (from statFn(p)[key], a 0–1 fraction) across the
+// selected reviewers: the reviewer's own value when just one is selected,
+// or mean ± SD across reviewers when several are — same macro-averaging
+// convention as buildAccuracyGridMatrix, for consistency across the panel.
+function combineMetric(list, statFn, key){
+  if(list.length === 0) return {text:"—"};
+  if(list.length === 1){
+    var v = statFn(list[0])[key];
+    return { text: (v===null||v===undefined) ? "—" : (Math.round(v*1000)/10)+"%", isScore: v!==null, frac: v };
+  }
+  var vals = list.map(function(p){ return statFn(p)[key]; }).filter(function(v){ return v!==null && v!==undefined; });
+  var ms = meanAndSD(vals);
+  if(ms.mean === null) return {text:"—"};
+  var text = (Math.round(ms.mean*1000)/10) + "%" + (ms.sd !== null ? " ± " + (Math.round(ms.sd*1000)/10) : "") + " (n=" + ms.n + ")";
+  return { text: text, isScore:true, frac: ms.mean };
+}
+
+function buildLevel1MetricsMatrix(list){
+  var headers = ["N (images)", "Accuracy", "Precision (macro)", "Recall (macro)", "F1 (macro)", "Ratings Compared", "Method", "Kappa", "PABAK", "Interpretation"];
+  var n = list.length ? level1MacroPRF(list[0]).n : 0;
+  var row = [
+    {text:String(n)},
+    combineMetric(list, level1MacroPRF, "accuracy"),
+    combineMetric(list, level1MacroPRF, "precision"),
+    combineMetric(list, level1MacroPRF, "recall"),
+    combineMetric(list, level1MacroPRF, "f1")
+  ].concat(agreementMetricCells(list,
+    function(a,b){ return pairsForReviewersLevel1AllSets(a,b,null); },
+    function(){ var l1=[]; STUDY.level1.sets.forEach(function(set,si){ l1=l1.concat(level1SetRatings(list,set,si,null)); }); return l1; }
+  ));
+  return { headers: headers, rows: [row] };
+}
+
+function buildLevel2MetricsMatrix(list){
+  var headers = ["Item Type", "N", "Accuracy", "Precision (fake=positive)", "Recall (fake=positive)", "F1", "Ratings Compared", "Method", "Kappa", "PABAK", "Interpretation"];
+  var types = [{key:"image", label:"Images"}, {key:"text", label:"Reports"}];
+  var rows = types.map(function(t){
+    var statFn = function(p){ return level2PRF(p, t.key); };
+    var n = list.length ? statFn(list[0]).n : 0;
+    var row = [
+      {text:t.label}, {text:String(n)},
+      combineMetric(list, statFn, "accuracy"),
+      combineMetric(list, statFn, "precision"),
+      combineMetric(list, statFn, "recall"),
+      combineMetric(list, statFn, "f1")
+    ].concat(agreementMetricCells(list,
+      function(a,b){ return pairsForReviewersLevel2ByType(a,b,t.key); },
+      function(){ return level2RatingsByType(list,t.key); }
+    ));
+    return row;
+  });
+  return { headers: headers, rows: rows };
+}
+
 function buildAccuracyByCategoryMatrix(list){
   var headers = ["Category", "Level 1 Accuracy", "Level 2 Accuracy", "Level 3 Accuracy", "Overall Accuracy"];
   var rows = METHOD_CATEGORIES.map(function(cat){
