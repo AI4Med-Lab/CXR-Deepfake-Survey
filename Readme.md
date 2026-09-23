@@ -1,6 +1,6 @@
 # Deepfake analysis for chest X-rays and radiology reports
 
-This repository contains the scripts used to study generated chest X-ray images and reports. It covers three related tasks:
+This repository contains the scripts used to study generated chest X-ray images and reports. It covers three related tasks: 
 
 - checking whether an image matches its generated report;
 - classifying reports as real or synthetic;
