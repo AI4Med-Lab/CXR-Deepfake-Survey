@@ -93,5 +93,5 @@ python image_report_fidelity_analysis/compare_deepfake_reports.py
 python image_report_fidelity_analysis/deepfake_images_distance_plots.py
 ```
 
-The image suite compares RAD-DINO and BiomedCLIP features with FID, KID, and manifold-based precision/recall, and produces plots. The report suite includes embedding-based distribution metrics, lexical diversity, readability and grammar-related measures, plus an optional MedGemma judge. The MedGemma path requires access to the gated Hugging Face model and enough GPU memory; use a small sample first.
+The image suite compares RAD-DINO and BiomedCLIP features with FID, KID, and manifold-based precision/recall, and produces plots. The report suite includes embedding-based distribution metrics, lexical diversity, readability and grammar-related measures.
 
