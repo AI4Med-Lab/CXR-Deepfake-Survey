@@ -12,7 +12,6 @@ The code is research-oriented rather than packaged as a library. Most experiment
 
 ```text
 Coherence_analysis/
-    image2report.py       Image-to-report retrieval with MedSigLIP
     matching.py           One-to-one image/report matching
     test_compare.py       Accuracy from saved round CSV files
 
@@ -66,8 +65,6 @@ python Coherence_analysis/test_compare.py \
     --dir ./matching_output \
     --rounds all
 ```
-
-`image2report.py` performs the smaller candidate-report retrieval experiment. Its command-line options are documented in the module docstring and `--help` output.
 
 ## Deepfake classifiers
 
